@@ -72,7 +72,14 @@ from minimalagent import Agent, tool
 # Define a tool
 @tool  # Just use @tool without specifying name
 def get_weather(location: str):
-    """Get weather for a location"""
+    """Get weather for a location.
+    
+    Args:
+        location: City name or coordinates to get weather for
+        
+    Returns:
+        Weather data dictionary
+    """
     # Your implementation here
     return {"temperature": 22, "condition": "sunny"}
 
@@ -91,7 +98,14 @@ from minimalagent import Agent, tool
 
 @tool
 def calculate(expression: str):
-    """Calculate the result of a mathematical expression"""
+    """Calculate the result of a mathematical expression.
+    
+    Args:
+        expression: The mathematical expression to evaluate
+        
+    Returns:
+        Dictionary containing the calculation result
+    """
     return {"result": eval(expression)}
 
 # Create an agent that shows reasoning
@@ -109,7 +123,14 @@ from minimalagent import Agent, tool
 
 @tool
 def search_database(query: str):
-    """Search for information in a database"""
+    """Search for information in a database.
+    
+    Args:
+        query: The search query string
+        
+    Returns:
+        Dictionary containing search results
+    """
     return {"results": f"Found results for: {query}"}
 
 # Create an agent with session memory
