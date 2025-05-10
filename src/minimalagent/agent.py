@@ -29,7 +29,8 @@ class Agent:
         max_steps: int = 5,
         show_reasoning: bool = True,
         model_id: str = "us.amazon.nova-pro-v1:0",
-        region: str = "us-west-2",
+        bedrock_region: str = "us-west-2",
+        memory_region: Optional[str] = None,
         system_prompt: str = "",
         use_session_memory: bool = False,
         session_table_name: str = "minimalagent-session-table",
@@ -43,7 +44,8 @@ class Agent:
             max_steps: Maximum number of tool use iterations to allow
             show_reasoning: Whether to show agent's step-by-step reasoning process
             model_id: Amazon Bedrock model ID to use (default: us.amazon.nova-pro-v1:0)
-            region: AWS region for Bedrock (default: us-west-2)
+            bedrock_region: AWS region for Bedrock (default: us-west-2)
+            memory_region: AWS region for DynamoDB session storage (default: same as bedrock_region)
             system_prompt: System prompt to customize model behavior (default: empty string)
             use_session_memory: Whether to enable persistent session memory with DynamoDB (default: False)
             session_table_name: DynamoDB table name for storing session data (default: minimalagent-session-table)
@@ -56,10 +58,11 @@ class Agent:
         # Set maximum tool use steps
         self.max_steps = max_steps
 
-        # Set model and region
+        # Set model and regions
         self.model_id = model_id
         self.system_prompt = system_prompt  # Will be processed before each run
-        self.aws_region = region
+        self.bedrock_region = bedrock_region
+        self.memory_region = memory_region if memory_region is not None else bedrock_region
 
         # Session management settings
         # Enable session memory either explicitly or implicitly when a table name is provided
@@ -75,7 +78,7 @@ class Agent:
         # Initialize session table if session memory is enabled (explicitly or implicitly)
         if self.use_session_memory:
             try:
-                self.ddb_client = boto3.client("dynamodb", region_name=self.aws_region)
+                self.ddb_client = boto3.client("dynamodb", region_name=self.memory_region)
                 self._ensure_session_table()
             except Exception as e:
                 error_msg = f"Failed to initialize DynamoDB client: {str(e)}"
@@ -92,7 +95,7 @@ class Agent:
         # Initialize Bedrock client
         try:
             self.bedrock_client = boto3.client(
-                "bedrock-runtime", region_name=self.aws_region
+                "bedrock-runtime", region_name=self.bedrock_region
             )
         except Exception as e:
             error_msg = f"Failed to initialize Bedrock client: {str(e)}"

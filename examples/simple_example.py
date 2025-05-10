@@ -40,7 +40,7 @@ if __name__ == "__main__":
         tools=[get_weather],
         show_reasoning=True,  # Show agent's reasoning process
         model_id="us.amazon.nova-pro-v1:0",  # Specified explicitly but using default value
-        region="us-west-2",  # Specified explicitly but using default value
+        bedrock_region="us-west-2",  # Specified explicitly but using default value
         system_prompt="You are a helpful weather assistant. Respond with a friendly tone and focus on providing accurate weather information.",
     )
 

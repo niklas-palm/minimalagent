@@ -32,7 +32,8 @@ class TestAgent:
         assert (
             agent.model_id == "us.amazon.nova-pro-v1:0"
         ), "Default model ID should be nova-pro"
-        assert agent.aws_region == "us-west-2", "Default region should be us-west-2"
+        assert agent.bedrock_region == "us-west-2", "Default bedrock_region should be us-west-2"
+        assert agent.memory_region == "us-west-2", "Default memory_region should be same as bedrock_region"
 
         # Verify behavior configuration
         assert agent.max_steps == 5, "Default max_steps should be 5"
@@ -89,6 +90,16 @@ class TestAgent:
         assert agent.use_session_memory is True
         assert agent.session_table_name == "custom-table"
         mock_boto3.client.assert_any_call("dynamodb", region_name="us-west-2")
+        assert mock_ddb_client.describe_table.called
+        
+        # Test with custom memory region
+        mock_boto3.reset_mock()
+        mock_ddb_client.reset_mock()
+        agent = Agent(use_session_memory=True, memory_region="us-east-1")
+        assert agent.use_session_memory is True
+        assert agent.memory_region == "us-east-1"
+        assert agent.bedrock_region == "us-west-2"  # Should still use default
+        mock_boto3.client.assert_any_call("dynamodb", region_name="us-east-1")
         assert mock_ddb_client.describe_table.called
 
     @patch("minimalagent.agent.boto3")

@@ -162,7 +162,8 @@ Initialize the agent with customizable parameters:
 agent = Agent(
     tools=[get_weather],
     model_id="us.amazon.nova-pro-v1:0",  # Default model ID
-    region="us-west-2",                  # Default AWS region
+    bedrock_region="us-west-2",          # AWS region for Bedrock
+    memory_region="us-east-1",           # Optional different region for DynamoDB (defaults to same as bedrock_region)
     show_reasoning=True,                 # Show the agent's step-by-step reasoning process
     max_steps=5,                         # Maximum number of tool use iterations
     system_prompt="You are a helpful assistant specialized in weather information",  # Optional system prompt

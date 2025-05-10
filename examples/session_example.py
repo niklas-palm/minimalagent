@@ -54,7 +54,8 @@ if __name__ == "__main__":
         tools=[get_weather],
         show_reasoning=True,  # Show agent's reasoning process
         model_id="us.amazon.nova-pro-v1:0",
-        region="us-west-2",
+        bedrock_region="us-west-2",          # Region for Amazon Bedrock
+        memory_region="us-west-2",           # Optional: can be different from bedrock_region
         session_table_name="weather-agent-sessions",  # Custom table name (also enables session memory)
         session_ttl=7200,  # 2 hours session TTL
     )
