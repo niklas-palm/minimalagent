@@ -1,6 +1,6 @@
 # MinimalAgent
 
-A lightweight agent framework for building intelligent applications.
+A lightweight agent framework for building agentic applications.
 
 ## Installation
 
@@ -17,6 +17,7 @@ MinimalAgent requires AWS credentials to access Amazon Bedrock and DynamoDB (if 
 1. Install the AWS CLI: [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
 2. Configure AWS credentials:
+
    ```bash
    aws configure
    ```
@@ -48,10 +49,13 @@ $env:AWS_REGION="us-west-2"
 Ensure your AWS credentials have the appropriate IAM permissions:
 
 #### Core Permissions (Always Required)
+
 - `bedrock:InvokeModel` - For calling foundation models
 
 #### Session Persistence Permissions (Only if using session_memory=True)
+
 The following DynamoDB permissions are only required if you enable session memory:
+
 - `dynamodb:CreateTable` - For automatic table creation
 - `dynamodb:UpdateTimeToLive` - For setting TTL on session data
 - `dynamodb:DescribeTable` - For checking if the table exists
@@ -66,7 +70,7 @@ If you don't plan to use session persistence, you can use a more restrictive pol
 from minimalagent import Agent, tool
 
 # Define a tool
-@tool(name="get_weather")
+@tool  # Just use @tool without specifying name
 def get_weather(location: str):
     """Get weather for a location"""
     # Your implementation here
@@ -80,10 +84,51 @@ response = agent.run("What's the weather in San Francisco?")
 print(response)
 ```
 
+### Example with Reasoning Display
+
+```python
+from minimalagent import Agent, tool
+
+@tool
+def calculate(expression: str):
+    """Calculate the result of a mathematical expression"""
+    return {"result": eval(expression)}
+
+# Create an agent that shows reasoning
+agent = Agent(tools=[calculate], show_reasoning=True)
+
+# Agent will display step-by-step thinking process
+response = agent.run("What is 25 * 4 + 10?")
+print(response)
+```
+
+### Example with Session Memory
+
+```python
+from minimalagent import Agent, tool
+
+@tool
+def search_database(query: str):
+    """Search for information in a database"""
+    return {"results": f"Found results for: {query}"}
+
+# Create an agent with session memory
+agent = Agent(tools=[search_database], use_session_memory=True)
+
+# First message in conversation
+session_id = "user123"  # Use a consistent ID for the same conversation
+response = agent.run("Find information about electric cars", session_id=session_id)
+print(response)
+
+# Follow-up question - agent remembers previous context
+response = agent.run("What about hybrid models?", session_id=session_id)
+print(response)
+```
+
 ## Features
 
 - Simple, intuitive API for creating agents
-- Tool decorator for easily adding capabilities 
+- Tool decorator for easily adding capabilities
 - Control over agent's reasoning process display
 - Built on Amazon Bedrock's function calling capabilities
 - Tool management (adding and removing tools dynamically)
@@ -112,7 +157,7 @@ MinimalAgent provides control for the agent's reasoning display:
 
 ```python
 agent = Agent(
-    tools=[get_weather], 
+    tools=[get_weather],
     show_reasoning=True  # Show the agent's step-by-step reasoning process with colored output
 )
 ```
@@ -145,7 +190,8 @@ response2 = agent.run("How about tomorrow?", session_id=session_id)  # Remembers
 ```
 
 Session features:
-- Automatic DynamoDB table creation if it doesn't exist 
+
+- Automatic DynamoDB table creation if it doesn't exist
 - Implied opt-in when specifying a custom table name
 - Configurable session TTL (time-to-live)
 - Seamless conversation context preservation
@@ -199,25 +245,26 @@ from minimalagent import Agent, tool
 @tool  # No parameters needed - everything is extracted from the docstring
 def get_weather(location: str, units: str = "metric") -> dict:
     """Get current weather information for a location.
-    
+
     Args:
         location: City name or coordinates to get weather for
         units: Measurement units (metric or imperial)
-    
+
     Returns:
         Dict containing weather information
     """
     # Your implementation here
     weather_data = {"temperature": 22.5, "condition": "sunny", "location": location}
-    
+
     # Convert to imperial if requested
     if units == "imperial":
         weather_data["temperature"] = round(weather_data["temperature"] * 9/5 + 32)
-    
+
     return weather_data
 ```
 
 The decorator automatically extracts:
+
 - Tool name from the function name
 - Description from the first line of the docstring
 - Parameter descriptions from the Args section
@@ -236,11 +283,11 @@ For more control, you can override specific aspects:
 )
 def get_weather(location: str, units: str = "metric") -> dict:
     """This docstring description will be overridden by the description parameter.
-    
+
     Args:
         location: This description will be overridden
         units: This description will still be used since it wasn't overridden
-        
+
     Returns:
         Weather data dictionary
     """
@@ -256,13 +303,13 @@ Your docstrings should follow this simple structure:
 @tool
 def my_tool(param1: str, param2: int = 0) -> dict:
     """First line becomes the tool description.
-    
+
     Any text here becomes the long description.
-    
+
     Args:
         param1: Description for first parameter
         param2: Description for second parameter
-    
+
     Returns:
         Description of what the tool returns
     """
@@ -270,6 +317,7 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 ```
 
 The requirements are:
+
 1. First line: Clear description of what the tool does
 2. Args section: Parameter descriptions in Google-style format
 3. Type annotations for all parameters (str, int, etc.)
