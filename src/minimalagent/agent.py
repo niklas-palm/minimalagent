@@ -62,7 +62,9 @@ class Agent:
         self.model_id = model_id
         self.system_prompt = system_prompt  # Will be processed before each run
         self.bedrock_region = bedrock_region
-        self.memory_region = memory_region if memory_region is not None else bedrock_region
+        self.memory_region = (
+            memory_region if memory_region is not None else bedrock_region
+        )
 
         # Session management settings
         # Enable session memory either explicitly or implicitly when a table name is provided
@@ -78,7 +80,9 @@ class Agent:
         # Initialize session table if session memory is enabled (explicitly or implicitly)
         if self.use_session_memory:
             try:
-                self.ddb_client = boto3.client("dynamodb", region_name=self.memory_region)
+                self.ddb_client = boto3.client(
+                    "dynamodb", region_name=self.memory_region
+                )
                 self._ensure_session_table()
             except Exception as e:
                 error_msg = f"Failed to initialize DynamoDB client: {str(e)}"
@@ -192,7 +196,11 @@ class Agent:
             List of message dictionaries if found, empty list otherwise
         """
         # Validate session_id to prevent injection attacks
-        if not self.ddb_client or not session_id or not self._is_valid_session_id(session_id):
+        if (
+            not self.ddb_client
+            or not session_id
+            or not self._is_valid_session_id(session_id)
+        ):
             return []
 
         try:
@@ -236,7 +244,12 @@ class Agent:
             True if successful, False otherwise
         """
         # Validate session_id to prevent injection attacks
-        if not self.ddb_client or not session_id or not messages or not self._is_valid_session_id(session_id):
+        if (
+            not self.ddb_client
+            or not session_id
+            or not messages
+            or not self._is_valid_session_id(session_id)
+        ):
             return False
 
         try:
@@ -388,10 +401,10 @@ class Agent:
     def _is_valid_session_id(self, session_id: str) -> bool:
         """
         Validate session ID to prevent injection attacks.
-        
+
         Args:
             session_id: The session identifier to validate
-            
+
         Returns:
             True if session_id is valid, False otherwise
         """
@@ -399,7 +412,7 @@ class Agent:
         # dashes, underscores, and can be up to 128 chars (common DynamoDB constraints)
         if not session_id:
             return False
-        
+
         # Validate using regex pattern for safe characters
         pattern = r"^[a-zA-Z0-9_\-]{1,128}$"
         return bool(re.match(pattern, session_id))
@@ -426,7 +439,7 @@ class Agent:
                 if self.show_reasoning:
                     self.logger.error(error)
                 return error
-                
+
             if self.ddb_client:
                 # Try to load existing session
                 messages = self._get_session_messages(session_id)

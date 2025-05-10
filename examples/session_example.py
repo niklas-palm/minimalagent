@@ -54,8 +54,8 @@ if __name__ == "__main__":
         tools=[get_weather],
         show_reasoning=True,  # Show agent's reasoning process
         model_id="us.amazon.nova-pro-v1:0",
-        bedrock_region="us-west-2",          # Region for Amazon Bedrock
-        memory_region="us-west-2",           # Optional: can be different from bedrock_region
+        bedrock_region="us-west-2",  # Region for Amazon Bedrock
+        memory_region="us-west-2",  # Optional: can be different from bedrock_region
         session_table_name="weather-agent-sessions",  # Custom table name (also enables session memory)
         session_ttl=7200,  # 2 hours session TTL
     )
@@ -64,9 +64,9 @@ if __name__ == "__main__":
     # Using a simpler format than UUID for session_id validation
     import random
     import string
-    
+
     # Generate a random string of letters and numbers (valid session ID format)
-    session_id = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    session_id = "".join(random.choices(string.ascii_letters + string.digits, k=16))
     print(f"Starting new conversation with session ID: {session_id}")
 
     # First query - this will start a new session
