@@ -104,8 +104,8 @@ class TestAgentRunMethod:
 
         # Configure mock to return different responses on successive calls
         mock_bedrock_client.converse.side_effect = [
-            mock_tool_response, 
-            mock_final_response
+            mock_tool_response,
+            mock_final_response,
         ]
 
         # Create agent with tool and run query
@@ -155,8 +155,8 @@ class TestAgentRunMethod:
 
         # Configure mock to return different responses on successive calls
         mock_bedrock_client.converse.side_effect = [
-            mock_tool_response, 
-            mock_final_response
+            mock_tool_response,
+            mock_final_response,
         ]
 
         # Create agent with tool and run query
@@ -166,7 +166,7 @@ class TestAgentRunMethod:
         # Assert response and that converse was called twice
         assert response == "The tool failed"
         assert mock_bedrock_client.converse.call_count == 2
-    
+
     @patch("minimalagent.agent.boto3")
     def test_run_max_steps_reached(self, mock_boto3):
         """Test that max_steps limit is enforced."""
@@ -205,7 +205,9 @@ class TestAgentRunMethod:
         }
 
         # Configure mock to return tool responses for max_steps, then final response
-        mock_bedrock_client.converse.side_effect = [mock_tool_response] * 3 + [mock_final_response]
+        mock_bedrock_client.converse.side_effect = [mock_tool_response] * 3 + [
+            mock_final_response
+        ]
 
         # Create agent with tool, max_steps=3, and run query
         agent = Agent(tools=[sample_tool], max_steps=3, show_reasoning=False)
@@ -221,7 +223,7 @@ class TestAgentRunMethod:
         # Set up mock clients
         mock_bedrock_client = MagicMock()
         mock_ddb_client = MagicMock()
-        
+
         # Configure boto3.client to return different clients based on service name
         def mock_client(service_name, **kwargs):
             if service_name == "bedrock-runtime":
@@ -229,12 +231,12 @@ class TestAgentRunMethod:
             elif service_name == "dynamodb":
                 return mock_ddb_client
             return MagicMock()
-            
+
         mock_boto3.client.side_effect = mock_client
-        
+
         # Mock DynamoDB query response (no previous messages)
         mock_ddb_client.query.return_value = {"Items": []}
-        
+
         # Mock bedrock response
         mock_response = {
             "stopReason": "end_turn",
@@ -256,7 +258,7 @@ class TestAgentRunMethod:
         mock_ddb_client.query.assert_called_once()
         mock_ddb_client.put_item.assert_called_once()
         mock_bedrock_client.converse.assert_called_once()
-    
+
     @patch("minimalagent.agent.boto3")
     def test_format_system_prompt(self, mock_boto3):
         """Test that system prompt is properly formatted."""
@@ -281,12 +283,12 @@ class TestAgentRunMethod:
 
         # Get the converse call arguments
         call_args = mock_bedrock_client.converse.call_args[1]
-        
+
         # Verify system prompt is included and properly formatted
         assert "system" in call_args
         assert isinstance(call_args["system"], list)
         assert "text" in call_args["system"][0]
-        
+
         system_text = call_args["system"][0]["text"]
         assert "Custom instructions" in system_text
         assert "The current time and date in UTC is:" in system_text
