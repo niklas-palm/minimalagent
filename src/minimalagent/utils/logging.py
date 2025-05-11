@@ -4,7 +4,6 @@
 import logging
 from typing import Optional
 
-
 # Configure agent logger
 logger = logging.getLogger("minimalagent")
 

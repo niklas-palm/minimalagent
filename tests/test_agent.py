@@ -1,8 +1,9 @@
 """Tests for the Agent class."""
 
 # Standard library imports
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Project imports
 from minimalagent import Agent, tool

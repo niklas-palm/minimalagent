@@ -1,9 +1,9 @@
 """Docstring parsing utilities for MinimalAgent."""
 
 # Standard library imports
-import re
 import inspect
-from typing import Dict, Tuple, Any, Optional, List
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class DocstringParser:

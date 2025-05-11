@@ -1,7 +1,7 @@
 """Tool utilities for MinimalAgent."""
 
 # Standard library imports
-from typing import Dict, Any, Callable
+from typing import Any, Callable, Dict
 
 
 def create_tool_spec(name: str, func: Callable) -> Dict[str, Any]:

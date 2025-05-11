@@ -1,19 +1,19 @@
 """Agent implementation for MinimalAgent."""
 
 # Standard library imports
-import json
 import datetime
+import json
 import re
 import time
-from typing import Any, List, Callable, Optional, Dict
 from textwrap import dedent
+from typing import Any, Callable, Dict, List, Optional
 
 # Third-party imports
 import boto3
 from botocore.exceptions import ClientError
 
 # Local imports
-from .utils.logging import setup_logging, Colors, color_log
+from .utils.logging import Colors, color_log, setup_logging
 from .utils.tools import create_tool_spec
 
 

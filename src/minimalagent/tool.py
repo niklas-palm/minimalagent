@@ -1,9 +1,9 @@
 """Tool decorator for MinimalAgent."""
 
 # Standard library imports
-import inspect
 import functools
-from typing import Dict, Optional, Any, Tuple, get_type_hints, Callable, Union
+import inspect
+from typing import Any, Callable, Dict, Optional, Tuple, Union, get_type_hints
 
 from .utils.docstring import DocstringParser
 
