@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "boto3>=1.38.13",
+    "boto3>=1.37.38",
     "requests>=2.25.0",
 ]
 
