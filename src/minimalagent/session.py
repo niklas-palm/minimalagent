@@ -242,7 +242,7 @@ class SessionManager:
 
     def get_session_messages(self, session_id: str) -> List[Dict[str, Any]]:
         """
-        Retrieve conversation history for a session from DynamoDB.
+        Retrieve the most recent conversation history for a session from DynamoDB.
 
         Args:
             session_id: The session identifier
@@ -259,20 +259,21 @@ class SessionManager:
             return []
 
         try:
-            # Query the table to get all messages for this session_id
+            # Query the table to get the most recent message item for this session_id
             response = self.ddb_client.query(
                 TableName=self.session_table_name,
                 KeyConditionExpression="pk = :pk",
                 ExpressionAttributeValues={":pk": {"S": f"messages#{session_id}"}},
-                ScanIndexForward=True,  # Sort in ascending order (oldest first)
+                ScanIndexForward=False,  # Sort in descending order (newest first)
+                Limit=1,  # Only get the most recent item
             )
 
             messages = []
-            if "Items" in response:
-                for item in response["Items"]:
-                    if "messages" in item:
-                        message_json = item["messages"]["S"]
-                        return json.loads(message_json)
+            if "Items" in response and response["Items"]:
+                item = response["Items"][0]  # Get the first (most recent) item
+                if "messages" in item:
+                    message_json = item["messages"]["S"]
+                    return json.loads(message_json)
 
             return messages
 

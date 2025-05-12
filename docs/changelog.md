@@ -1,17 +1,7 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.2.1] - 2025-05-12
-
-### Fixed
-
-- Fixed session message retrieval to consistently get the most recent conversation history
-  - Changed `get_session_messages` query to sort by timestamp descending (newest first)
-  - Added limit to only fetch the most recent message item
+!!! info
+    This page mirrors the project's main [CHANGELOG.md](https://github.com/nipalm/minimalagent/blob/main/CHANGELOG.md) file.
 
 ## [0.2.0] - 2025-05-12
 

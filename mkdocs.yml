@@ -47,6 +47,10 @@ nav:
   - Getting Started: getting-started.md
   - User Guide:
     - Tools: guide/tools.md
+    - Sessions: guide/sessions.md
+    - Reasoning Display: guide/logging.md
+    - Data Models: guide/models.md
+    - Configuration: guide/configuration.md
   - Examples:
     - Basic Usage: examples/basic.md
   - API Reference:

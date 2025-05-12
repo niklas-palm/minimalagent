@@ -295,6 +295,12 @@ class TestSessionManager(unittest.TestCase):
         self.assertEqual(result, mock_messages)
         mock_ddb.query.assert_called_once()
 
+        # Verify the query parameters - checking for ScanIndexForward=False and Limit=1
+        args, kwargs = mock_ddb.query.call_args
+        self.assertEqual(kwargs["TableName"], "test-table")
+        self.assertEqual(kwargs["ScanIndexForward"], False)
+        self.assertEqual(kwargs["Limit"], 1)
+
         # Test with invalid session ID
         result = self.session_manager.get_session_messages("invalid/id")
         self.assertEqual(result, [])
