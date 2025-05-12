@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed `timestamp` attribute to `sk` (sort key)
   - All existing tables will need to be recreated with the new schema
 - Changed default log level from ERROR to WARNING to align with Python logging standards
+- Improved DynamoDB size limit handling to be more robust and user-friendly
+  - Changed from preemptive size checking to exception-based handling
+  - Added explicit warning to final response when size limit is exceeded
+  - Now keeps full reasoning data until a size exception is encountered
 
 ### Added
 
@@ -28,10 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added debug logging for all major agent operations
 - Improved error logging to always log errors regardless of `show_reasoning` setting
 - Enhanced display methods with more distinct color coding and better formatting
+- Added `exceeded_size_limit` flag to Reasoning model to indicate when data was truncated
+- Added special formatting for info messages to distinguish them from other output
 
 ### Fixed
 
 - Improved test coverage for real_time_reasoning feature
+- Fixed duplicate log entries by setting logger.propagate=False
+- Fixed plain text info messages by adding proper color formatting
 
 ## [0.1.0] - 2025-05-10
 

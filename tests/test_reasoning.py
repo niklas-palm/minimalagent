@@ -180,11 +180,11 @@ class TestReasoningPersistence(unittest.TestCase):
         ]
 
         test_reasoning = Reasoning(
-            session_id=self.session_id, 
-            query="Test query", 
-            steps=steps, 
+            session_id=self.session_id,
+            query="Test query",
+            steps=steps,
             total_steps=3,
-            final_response="This is the final response."
+            final_response="This is the final response.",
         )
 
         # Mock DynamoDB to raise a size limit exception on first put_item call
@@ -213,7 +213,7 @@ class TestReasoningPersistence(unittest.TestCase):
 
         # Check the reasoning object was updated with the exceeded_size_limit flag
         self.assertTrue(test_reasoning.exceeded_size_limit)
-        
+
         # Check that a warning was added to the final response
         self.assertIn("WARNING", test_reasoning.final_response)
         self.assertIn("exceeded the maximum size limit", test_reasoning.final_response)
