@@ -5,12 +5,25 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from minimalagent import Agent
+from minimalagent import Agent, tool
 from minimalagent.models import Reasoning
 
 
 class TestSessionContinuity:
     """Test cases for session continuity functionality."""
+    
+    @tool
+    def calculate(a: int, b: int):
+        """Add two numbers together.
+        
+        Args:
+            a: First number
+            b: Second number
+            
+        Returns:
+            Sum of the two numbers
+        """
+        return {"result": a + b}
 
     @patch("minimalagent.agent.boto3")
     @patch("minimalagent.session.boto3")
@@ -130,3 +143,193 @@ class TestSessionContinuity:
             assert second_response_saved, "Second response not saved"
         else:
             assert False, "No message save call found in DynamoDB put_item calls"
+    
+    @patch("minimalagent.agent.boto3")
+    @patch("minimalagent.session.boto3")
+    def test_session_tool_continuity(self, mock_session_boto3, mock_agent_boto3):
+        """Test session continuity with tool use."""
+        # Set up mock clients
+        mock_bedrock_client = MagicMock()
+        mock_ddb_client = MagicMock()
+        
+        # Configure boto3 mocks
+        mock_agent_boto3.client.return_value = mock_bedrock_client
+        mock_session_boto3.client.return_value = mock_ddb_client
+        
+        # Create existing messages for the session with previous tool use
+        existing_messages = [
+            {"role": "user", "content": [{"text": "Add 5 and 3"}]},
+            {"role": "assistant", "content": [
+                {"text": "I'll help you add those numbers."},
+                {"toolUse": {
+                    "name": "calculate",
+                    "input": {"a": 5, "b": 3},
+                    "toolUseId": "prev123"
+                }}
+            ]},
+            {"role": "user", "content": [
+                {"toolResult": {
+                    "toolUseId": "prev123",
+                    "content": [{"json": {"result": 8}}]
+                }}
+            ]},
+            {"role": "assistant", "content": [{"text": "The result is 8."}]}
+        ]
+        
+        # Mock DynamoDB to return existing messages
+        mock_ddb_client.query.return_value = {
+            "Items": [
+                {
+                    "pk": {"S": "messages#test_session"},
+                    "sk": {"N": "1234567890"},
+                    "messages": {"S": json.dumps(existing_messages)},
+                    "expiration_time": {"N": "1234657890"}
+                }
+            ]
+        }
+        
+        # Set up two responses for the mock:
+        # 1. First response requesting tool use
+        tool_response = {
+            "stopReason": "tool_use",
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "text": "I'll help you add those numbers together."
+                        },
+                        {
+                            "toolUse": {
+                                "name": "calculate",
+                                "input": {"a": 10, "b": 7},
+                                "toolUseId": "new456"
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        
+        # 2. Final response after tool execution
+        final_response = {
+            "stopReason": "end_turn",
+            "output": {
+                "message": {
+                    "role": "assistant",
+                    "content": [{"text": "The result of 10 + 7 is 17."}]
+                }
+            }
+        }
+        
+        # Configure mock to return different responses on successive calls
+        mock_bedrock_client.converse.side_effect = [tool_response, final_response]
+        
+        # Create agent with the tool and session memory
+        agent = Agent(
+            tools=[self.calculate], 
+            use_session_memory=True, 
+            log_level="CRITICAL", 
+            show_reasoning=False
+        )
+        
+        # Run agent with a new calculation request
+        response, reasoning = agent.run("Add 10 and 7", session_id="test_session")
+        
+        # 1. Verify previous session messages were loaded
+        assert mock_ddb_client.query.call_count > 0
+        
+        # 2. Verify first model call contained previous conversation history
+        first_call_args = mock_bedrock_client.converse.call_args_list[0][1]
+        first_messages = first_call_args["messages"]
+        
+        # Check for previous calculation in the message history
+        prev_calculation_request = any(
+            m.get("role") == "user" and
+            any("Add 5 and 3" in str(c.get("text", "")) for c in m.get("content", []))
+            for m in first_messages
+        )
+        assert prev_calculation_request, "Previous calculation request not found in messages"
+        
+        # Check for previous tool use in the message history
+        prev_tool_use = any(
+            m.get("role") == "assistant" and
+            any(tu for tu in m.get("content", []) if "toolUse" in tu)
+            for m in first_messages
+        )
+        assert prev_tool_use, "Previous tool use not found in messages"
+        
+        # Check for previous tool result in the message history
+        prev_tool_result = any(
+            m.get("role") == "user" and 
+            any(tr for tr in m.get("content", []) if "toolResult" in tr)
+            for m in first_messages
+        )
+        assert prev_tool_result, "Previous tool result not found in messages"
+        
+        # 3. Verify new tool was invoked
+        assert len(mock_bedrock_client.converse.call_args_list) >= 2, "Model should be called at least twice"
+        
+        # 4. Verify second model call contained tool results
+        second_call_args = mock_bedrock_client.converse.call_args_list[1][1]
+        second_messages = second_call_args["messages"]
+        
+        # Find tool result in the messages
+        new_tool_result = any(
+            m.get("role") == "user" and 
+            any(tr for tr in m.get("content", []) if "toolResult" in tr and tr["toolResult"].get("toolUseId") == "new456")
+            for m in second_messages
+        )
+        assert new_tool_result, "New tool result not found in messages sent to model"
+        
+        # 5. Verify complete history saved to DynamoDB
+        put_item_calls = [c for c in mock_ddb_client.put_item.call_args_list 
+                        if "pk" in c[1]["Item"] and "messages#test_session" in str(c[1]["Item"]["pk"]["S"])]
+        assert len(put_item_calls) > 0, "No message save calls found"
+        
+        # Get the saved messages from the last put_item call
+        last_save_call = put_item_calls[-1]
+        saved_messages_json = last_save_call[1]["Item"]["messages"]["S"]
+        saved_messages = json.loads(saved_messages_json)
+        
+        # Verify previous calculation is present
+        prev_calc_saved = any(
+            m.get("role") == "user" and
+            any("Add 5 and 3" in str(c.get("text", "")) for c in m.get("content", []))
+            for m in saved_messages
+        )
+        assert prev_calc_saved, "Previous calculation not found in saved messages"
+        
+        # Verify new calculation is present
+        new_calc_saved = any(
+            m.get("role") == "user" and
+            any("Add 10 and 7" in str(c.get("text", "")) for c in m.get("content", []))
+            for m in saved_messages
+        )
+        assert new_calc_saved, "New calculation not found in saved messages"
+        
+        # Verify new tool use is present
+        new_tool_use_saved = any(
+            m.get("role") == "assistant" and
+            any(tu for tu in m.get("content", []) 
+                if "toolUse" in tu and tu["toolUse"].get("toolUseId") == "new456")
+            for m in saved_messages
+        )
+        assert new_tool_use_saved, "New tool use not found in saved messages"
+        
+        # Verify new tool result is present
+        new_tool_result_saved = any(
+            m.get("role") == "user" and
+            any(tr for tr in m.get("content", []) 
+                if "toolResult" in tr and tr["toolResult"].get("toolUseId") == "new456")
+            for m in saved_messages
+        )
+        assert new_tool_result_saved, "New tool result not found in saved messages"
+        
+        # Verify final response is present
+        final_response_saved = any(
+            m.get("role") == "assistant" and
+            any("17" in str(c.get("text", "")) for c in m.get("content", []))
+            for m in saved_messages
+        )
+        assert final_response_saved, "Final response not found in saved messages"
