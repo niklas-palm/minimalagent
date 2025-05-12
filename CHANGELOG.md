@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2025-05-13
+
+### Changed
+
+- Significantly improved documentation for enhanced developer experience
+  - Simplified data models documentation to focus on practical usage
+  - Restructured logging documentation for better clarity
+  - Enhanced README with clearer reasoning display examples
+  - Improved configuration reference with detailed parameter validation and dependencies
+
+### Added
+
+- Added "Bring Your Own DynamoDB Table" section with CloudFormation example
+- Added comprehensive parameter reference with validation rules
+- Added example code for analyzing tool usage in sessions
+
 ## [0.2.2] - 2025-05-12
 
 ### Fixed

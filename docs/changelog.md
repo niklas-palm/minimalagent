@@ -3,6 +3,38 @@
 !!! info
     This page mirrors the project's main [CHANGELOG.md](https://github.com/nipalm/minimalagent/blob/main/CHANGELOG.md) file.
 
+## [0.2.3] - 2025-05-13
+
+### Changed
+
+- Significantly improved documentation for enhanced developer experience
+  - Simplified data models documentation to focus on practical usage
+  - Restructured logging documentation for better clarity
+  - Enhanced README with clearer reasoning display examples
+  - Improved configuration reference with detailed parameter validation and dependencies
+
+### Added
+
+- Added "Bring Your Own DynamoDB Table" section with CloudFormation example
+- Added comprehensive parameter reference with validation rules
+- Added example code for analyzing tool usage in sessions
+
+## [0.2.2] - 2025-05-12
+
+### Fixed
+
+- Fixed duplicate message issue in conversation history
+  - Removed duplicate assistant message append before saving to DynamoDB
+  - Prevents both duplicate messages in the array and self-repeating content in responses
+
+## [0.2.1] - 2025-05-12
+
+### Fixed
+
+- Fixed session message retrieval to consistently get the most recent conversation history
+  - Changed `get_session_messages` query to sort by timestamp descending (newest first)
+  - Added limit to only fetch the most recent message item
+
 ## [0.2.0] - 2025-05-12
 
 ### Changed
