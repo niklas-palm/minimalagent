@@ -36,21 +36,23 @@ class TestAgent:
         assert (
             agent.bedrock_region == "us-west-2"
         ), "Default bedrock_region should be us-west-2"
+        # Check memory region via session_manager
+        memory_region = agent.bedrock_region  # Default is same as bedrock_region
         assert (
-            agent.memory_region == "us-west-2"
+            agent.session_manager.memory_region == memory_region
         ), "Default memory_region should be same as bedrock_region"
 
         # Verify behavior configuration
         assert agent.max_steps == 5, "Default max_steps should be 5"
         assert agent.show_reasoning is True, "Default show_reasoning should be True"
 
-        # Verify session configuration
+        # Verify session configuration via session_manager
         assert (
-            agent.use_session_memory is False
+            agent.session_manager.use_session_memory is False
         ), "Default session memory should be disabled"
         assert (
-            agent.session_table_name is None
-        ), "Default session table name should be None"
+            agent.session_manager.session_table_name is None
+        ), "Default session table name should be None when use_session_memory is False"
 
     def test_add_tools(self):
         """Test adding tools to the agent."""
@@ -74,7 +76,7 @@ class TestAgent:
         assert len(agent.tool_config["tools"]) == 0
         assert len(agent.tool_functions) == 0
 
-    @patch("minimalagent.agent.boto3")
+    @patch("minimalagent.session.boto3")
     def test_session_initialization(self, mock_boto3):
         """Test session initialization logic."""
         # Set up mocks
@@ -83,8 +85,8 @@ class TestAgent:
 
         # Test explicit opt-in
         agent = Agent(use_session_memory=True)
-        assert agent.use_session_memory is True
-        assert agent.session_table_name == "minimalagent-session-table"
+        assert agent.session_manager.use_session_memory is True
+        assert agent.session_manager.session_table_name == "minimalagent-session-table"
         mock_boto3.client.assert_any_call("dynamodb", region_name="us-west-2")
         assert mock_ddb_client.describe_table.called
 
@@ -92,8 +94,8 @@ class TestAgent:
         mock_boto3.reset_mock()
         mock_ddb_client.reset_mock()
         agent = Agent(session_table_name="custom-table")
-        assert agent.use_session_memory is True
-        assert agent.session_table_name == "custom-table"
+        assert agent.session_manager.use_session_memory is True
+        assert agent.session_manager.session_table_name == "custom-table"
         mock_boto3.client.assert_any_call("dynamodb", region_name="us-west-2")
         assert mock_ddb_client.describe_table.called
 
@@ -101,8 +103,8 @@ class TestAgent:
         mock_boto3.reset_mock()
         mock_ddb_client.reset_mock()
         agent = Agent(use_session_memory=True, memory_region="us-east-1")
-        assert agent.use_session_memory is True
-        assert agent.memory_region == "us-east-1"
+        assert agent.session_manager.use_session_memory is True
+        assert agent.session_manager.memory_region == "us-east-1"
         assert agent.bedrock_region == "us-west-2"  # Should still use default
         mock_boto3.client.assert_any_call("dynamodb", region_name="us-east-1")
         assert mock_ddb_client.describe_table.called

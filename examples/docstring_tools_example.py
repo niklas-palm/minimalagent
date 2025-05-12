@@ -118,7 +118,8 @@ if __name__ == "__main__":
     # Create agent with our tools
     agent = Agent(
         tools=[get_weather, search_database, math_operation],
-        show_reasoning=True,  # Show agent's reasoning process
+        show_reasoning=True,  # Show colorized reasoning display
+        log_level="WARNING",  # Only show warnings and errors (default)
     )
 
     # Run a weather query

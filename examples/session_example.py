@@ -52,12 +52,14 @@ if __name__ == "__main__":
     # Create agent with session support (implied opt-in by providing table name)
     agent = Agent(
         tools=[get_weather],
-        show_reasoning=True,  # Show agent's reasoning process
+        show_reasoning=True,  # Show colorized reasoning display
+        log_level="INFO",  # Show information logs along with warnings/errors
         model_id="us.amazon.nova-pro-v1:0",
         bedrock_region="us-west-2",  # Region for Amazon Bedrock
         memory_region="us-west-2",  # Optional: can be different from bedrock_region
         session_table_name="weather-agent-sessions",  # Custom table name (also enables session memory)
         session_ttl=7200,  # 2 hours session TTL
+        real_time_reasoning=True,  # Enable real-time reasoning updates during execution
     )
 
     # Generate a session ID (in a real app, this might be tied to a user)

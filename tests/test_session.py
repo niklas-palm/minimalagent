@@ -28,7 +28,7 @@ def echo(text: str):
 class TestSessionPersistence:
     """Test cases for session persistence functionality."""
 
-    @patch("minimalagent.agent.boto3")
+    @patch("minimalagent.session.boto3")
     def test_get_session_messages(self, mock_boto3):
         """Test retrieving session messages from DynamoDB."""
         # Set up mocks
@@ -43,8 +43,8 @@ class TestSessionPersistence:
         mock_ddb_client.query.return_value = {
             "Items": [
                 {
-                    "session_id": {"S": "test_session"},
-                    "timestamp": {"N": "1234567890"},
+                    "pk": {"S": "messages#test_session"},
+                    "sk": {"N": "1234567890"},
                     "messages": {"S": json.dumps(mock_messages)},
                     "expiration_time": {"N": "1234657890"},
                 }
@@ -52,16 +52,16 @@ class TestSessionPersistence:
         }
 
         # Create agent with session support
-        agent = Agent(use_session_memory=True)
+        agent = Agent(use_session_memory=True, log_level="CRITICAL")
 
         # Call the method directly for testing
-        result = agent._get_session_messages("test_session")
+        result = agent.session_manager.get_session_messages("test_session")
 
         # Check the result
         assert result == mock_messages
         mock_ddb_client.query.assert_called_once()
 
-    @patch("minimalagent.agent.boto3")
+    @patch("minimalagent.session.boto3")
     def test_save_session_messages(self, mock_boto3):
         """Test saving session messages to DynamoDB."""
         # Set up mocks
@@ -69,7 +69,7 @@ class TestSessionPersistence:
         mock_boto3.client.return_value = mock_ddb_client
 
         # Create agent with session support
-        agent = Agent(use_session_memory=True)
+        agent = Agent(use_session_memory=True, log_level="CRITICAL")
 
         # Test messages
         mock_messages = [
@@ -78,13 +78,15 @@ class TestSessionPersistence:
         ]
 
         # Call the method directly for testing
-        result = agent._save_session_messages("test_session", mock_messages)
+        result = agent.session_manager.save_session_messages(
+            "test_session", mock_messages
+        )
 
         # Check the result
         assert result is True
         mock_ddb_client.put_item.assert_called_once()
 
-    @patch("minimalagent.agent.boto3")
+    @patch("minimalagent.session.boto3")
     def test_session_table_creation(self, mock_boto3):
         """Test creation of DynamoDB table for sessions."""
         # Set up mocks
@@ -104,7 +106,7 @@ class TestSessionPersistence:
         mock_ddb_client.get_waiter.return_value = mock_waiter
 
         # Create agent with session support
-        agent = Agent(use_session_memory=True)
+        agent = Agent(use_session_memory=True, log_level="CRITICAL")
 
         # Check that table creation was attempted
         mock_ddb_client.create_table.assert_called_once()

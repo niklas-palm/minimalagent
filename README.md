@@ -1,81 +1,18 @@
 # MinimalAgent
 
-A lightweight agent framework for building agentic applications.
-
-## Installation
-
-```bash
-pip install minimalagent
-```
-
-## AWS Credentials Setup
-
-MinimalAgent requires AWS credentials to access Amazon Bedrock and DynamoDB (if using session persistence).
-
-### Option 1: AWS CLI Configuration (Recommended)
-
-1. Install the AWS CLI: [Installation Guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-
-2. Configure AWS credentials:
-
-   ```bash
-   aws configure
-   ```
-
-3. Follow the prompts to enter your:
-   - AWS Access Key ID
-   - AWS Secret Access Key
-   - Default region (e.g., us-west-2)
-   - Default output format (json)
-
-### Option 2: Environment Variables
-
-Set AWS credentials through environment variables:
-
-```bash
-# Linux/macOS
-export AWS_ACCESS_KEY_ID=your_access_key_id
-export AWS_SECRET_ACCESS_KEY=your_secret_access_key
-export AWS_REGION=us-west-2
-
-# Windows PowerShell
-$env:AWS_ACCESS_KEY_ID="your_access_key_id"
-$env:AWS_SECRET_ACCESS_KEY="your_secret_access_key"
-$env:AWS_REGION="us-west-2"
-```
-
-### Required IAM Permissions
-
-Ensure your AWS credentials have the appropriate IAM permissions:
-
-#### Core Permissions (Always Required)
-
-- `bedrock:InvokeModel` - For calling foundation models
-
-#### Session Persistence Permissions (Only if using session_memory=True)
-
-The following DynamoDB permissions are only required if you enable session memory:
-
-- `dynamodb:CreateTable` - For automatic table creation
-- `dynamodb:UpdateTimeToLive` - For setting TTL on session data
-- `dynamodb:DescribeTable` - For checking if the table exists
-- `dynamodb:PutItem` - For saving session messages
-- `dynamodb:Query` - For retrieving session messages
-
-If you don't plan to use session persistence, you can use a more restrictive policy that only includes the Bedrock permissions.
+A lightweight agent framework for building agentic applications with Amazon Bedrock.
 
 ## Quick Start
 
 ```python
 from minimalagent import Agent, tool
 
-# Define a tool
-@tool  # Just use @tool without specifying name
+@tool
 def get_weather(location: str):
     """Get weather for a location.
     
     Args:
-        location: City name or coordinates to get weather for
+        location: City name to get weather for
         
     Returns:
         Weather data dictionary
@@ -83,20 +20,111 @@ def get_weather(location: str):
     # Your implementation here
     return {"temperature": 22, "condition": "sunny"}
 
-# Create an agent
-agent = Agent(tools=[get_weather])  # Uses default model: us.amazon.nova-pro-v1:0
+# Create agent
+agent = Agent(tools=[get_weather])
 
 # Run a query
-response = agent.run("What's the weather in San Francisco?")
+response, reasoning = agent.run("What's the weather in San Francisco?")
 print(response)
 ```
 
-### Example with Reasoning Display
+## Installation
+
+```bash
+pip install minimalagent
+```
+
+## Key Features
+
+- **Simple API**: Intuitive design with minimal boilerplate
+- **Tool-first approach**: Easy tool creation with docstring parsing
+- **Built-in session memory**: Persistent conversations via DynamoDB
+- **Step-by-step reasoning**: Visibility into the agent's thought process
+- **Configurable logging**: Separate display and debugging channels
+- **AWS-native**: Uses Amazon Bedrock for function calling
+
+## Core Concepts
+
+### Tools
+
+Tools give your agent capabilities. Simply decorate functions with `@tool`:
 
 ```python
-from minimalagent import Agent, tool
-
 @tool
+def search_database(query: str, limit: int = 10) -> list:
+    """Search the database for records matching the query.
+    
+    Args:
+        query: The search term
+        limit: Maximum number of results
+        
+    Returns:
+        List of matching records
+    """
+    # Your implementation here
+    return [{"id": 1, "name": query}]
+```
+
+Tools can be added or removed dynamically:
+
+```python
+# Add tools after initialization
+agent.add_tools([another_tool])
+
+# Remove all tools
+agent.clear_tools()
+```
+
+### Session Management
+
+Enable persistent conversations across multiple interactions:
+
+```python
+# Create an agent with session support
+agent = Agent(use_session_memory=True)
+
+# Use a consistent session ID for the same conversation
+response1 = agent.run("Find information about electric cars", session_id="user123")
+response2 = agent.run("What about hybrid models?", session_id="user123")  # Remembers context
+```
+
+### Reasoning Process
+
+Access the agent's step-by-step thinking:
+
+```python
+response, reasoning = agent.run("Calculate 25 * 4 + 10")
+
+# Access reasoning data
+print(f"Query: {reasoning['query']}")
+print(f"Steps: {reasoning['total_steps']}")
+for step in reasoning['steps']:
+    print(f"Step {step['step_number']} thinking: {step['thinking']}")
+```
+
+## Common Usage Patterns
+
+### Configuring Display and Logging
+
+Control both colorized output and standard logging:
+
+```python
+# Interactive development - show colorized reasoning and debug logs
+agent = Agent(show_reasoning=True, log_level="DEBUG")
+
+# Production with detailed logs - no colorized output but informative logs
+agent = Agent(show_reasoning=False, log_level="INFO")
+
+# Production deployment - no display, only warnings and errors
+agent = Agent(show_reasoning=False, log_level="WARNING")  # Default
+```
+
+### Creating Tools with Docstrings
+
+MinimalAgent automatically extracts tool information from docstrings:
+
+```python
+@tool  # Simple approach - everything from docstring
 def calculate(expression: str):
     """Calculate the result of a mathematical expression.
     
@@ -104,271 +132,191 @@ def calculate(expression: str):
         expression: The mathematical expression to evaluate
         
     Returns:
-        Dictionary containing the calculation result
+        Dict containing the calculation result
     """
     return {"result": eval(expression)}
-
-# Create an agent that shows reasoning
-agent = Agent(tools=[calculate], show_reasoning=True)
-
-# Agent will display step-by-step thinking process
-response = agent.run("What is 25 * 4 + 10?")
-print(response)
 ```
 
-### Example with Session Memory
-
-```python
-from minimalagent import Agent, tool
-
-@tool
-def search_database(query: str):
-    """Search for information in a database.
-    
-    Args:
-        query: The search query string
-        
-    Returns:
-        Dictionary containing search results
-    """
-    return {"results": f"Found results for: {query}"}
-
-# Create an agent with session memory
-agent = Agent(tools=[search_database], use_session_memory=True)
-
-# First message in conversation
-session_id = "user123"  # Use a consistent ID for the same conversation
-response = agent.run("Find information about electric cars", session_id=session_id)
-print(response)
-
-# Follow-up question - agent remembers previous context
-response = agent.run("What about hybrid models?", session_id=session_id)
-print(response)
-```
-
-## Features
-
-- Simple, intuitive API for creating agents
-- Tool decorator for easily adding capabilities
-- Control over agent's reasoning process display
-- Built on Amazon Bedrock's function calling capabilities
-- Tool management (adding and removing tools dynamically)
-
-## Configuration
-
-Initialize the agent with customizable parameters:
-
-```python
-agent = Agent(
-    tools=[get_weather],
-    model_id="us.amazon.nova-pro-v1:0",  # Default model ID
-    bedrock_region="us-west-2",          # AWS region for Bedrock
-    memory_region="us-east-1",           # Optional different region for DynamoDB (defaults to same as bedrock_region)
-    show_reasoning=True,                 # Show the agent's step-by-step reasoning process
-    max_steps=5,                         # Maximum number of tool use iterations
-    system_prompt="You are a helpful assistant specialized in weather information",  # Optional system prompt
-    use_session_memory=True,             # Enable persistent conversations with DynamoDB (default: False)
-    session_table_name="my-agent-sessions",  # DynamoDB table for persistent sessions (default: minimalagent-session-table)
-    session_ttl=3600                     # Session time-to-live in seconds (default: 1 hour)
-)
-```
-
-## Logging
-
-MinimalAgent provides control for the agent's reasoning display:
-
-```python
-agent = Agent(
-    tools=[get_weather],
-    show_reasoning=True  # Show the agent's step-by-step reasoning process with colored output
-)
-```
-
-## Persistent Sessions
-
-MinimalAgent supports persistent conversation memory using DynamoDB:
-
-```python
-# Create an agent with session support - Method 1: Explicit opt-in
-agent = Agent(
-    tools=[get_weather],
-    use_session_memory=True,              # Explicitly enable session memory
-    session_ttl=7200,                     # 2 hours TTL (optional)
-)
-
-# Method 2: Implied opt-in by providing a custom table name
-agent = Agent(
-    tools=[get_weather],
-    session_table_name="weather-agent-sessions",  # Providing a custom table name automatically enables session memory
-    session_ttl=7200,                     # 2 hours TTL (optional)
-)
-
-# First conversation turn - generates a new session
-session_id = "user123"  # You can use any string as session ID
-response1 = agent.run("What's the weather in Seattle?", session_id=session_id)
-
-# Later conversation turns - continues the same session
-response2 = agent.run("How about tomorrow?", session_id=session_id)  # Remembers previous context
-```
-
-Session features:
-
-- Automatic DynamoDB table creation if it doesn't exist
-- Implied opt-in when specifying a custom table name
-- Configurable session TTL (time-to-live)
-- Seamless conversation context preservation
-- Sessions are stored as single items in DynamoDB for efficiency
-
-## Tool Management
-
-MinimalAgent allows dynamic management of tools:
-
-```python
-from minimalagent import Agent, tool
-
-# Create tools
-@tool
-def tool_a(param: str):
-    """Tool A description"""
-    return {"result": f"Processed {param}"}
-
-@tool
-def tool_b(param: str):
-    """Tool B description"""
-    return {"result": f"Processed {param}"}
-
-# Create agent with initial tools
-agent = Agent(tools=[tool_a])
-
-# Add more tools later
-agent.add_tools([tool_b])
-
-# Run the agent with both tools available
-response = agent.run("Use tool B to process data")
-
-# Clear all tools
-agent.clear_tools()
-
-# Run with no tools available
-response = agent.run("Can you process this data?")
-```
-
-## Creating Custom Tools
-
-MinimalAgent makes tool creation simple with two approaches - both using the `@tool` decorator:
-
-### Simple Approach: Docstring-Based Tools (Recommended)
-
-Just add the `@tool` decorator and well-structured docstrings:
-
-```python
-from minimalagent import Agent, tool
-
-@tool  # No parameters needed - everything is extracted from the docstring
-def get_weather(location: str, units: str = "metric") -> dict:
-    """Get current weather information for a location.
-
-    Args:
-        location: City name or coordinates to get weather for
-        units: Measurement units (metric or imperial)
-
-    Returns:
-        Dict containing weather information
-    """
-    # Your implementation here
-    weather_data = {"temperature": 22.5, "condition": "sunny", "location": location}
-
-    # Convert to imperial if requested
-    if units == "imperial":
-        weather_data["temperature"] = round(weather_data["temperature"] * 9/5 + 32)
-
-    return weather_data
-```
-
-The decorator automatically extracts:
-
-- Tool name from the function name
-- Description from the first line of the docstring
-- Parameter descriptions from the Args section
-
-### Advanced Approach: Explicit Configuration
-
-For more control, you can override specific aspects:
+For more control, override specific aspects:
 
 ```python
 @tool(
-    name="weather_lookup",  # Override the default name
-    description="Get weather conditions for any location",  # Override description
+    name="weather_lookup",  # Override default name
+    description="Get weather conditions",  # Override description
     param_descriptions={
-        "location": "Location name or geographic coordinates"  # Override specific parameter descriptions
+        "location": "Geographic location"  # Override specific parameter
     }
 )
 def get_weather(location: str, units: str = "metric") -> dict:
-    """This docstring description will be overridden by the description parameter.
-
-    Args:
-        location: This description will be overridden
-        units: This description will still be used since it wasn't overridden
-
-    Returns:
-        Weather data dictionary
-    """
     # Implementation...
-    return {"temperature": 22, "condition": "sunny", "location": location}
+    return {"temperature": 22, "condition": "sunny"}
 ```
 
-### Docstring Format Requirements
+### Real-Time Reasoning Updates
 
-Your docstrings should follow this simple structure:
+Track the agent's thinking process during execution:
 
 ```python
-@tool
-def my_tool(param1: str, param2: int = 0) -> dict:
-    """First line becomes the tool description.
+agent = Agent(
+    use_session_memory=True,
+    real_time_reasoning=True  # Enable real-time updates
+)
 
-    Any text here becomes the long description.
+# Run the agent
+response, reasoning = agent.run("Search for climate change", session_id="user123")
 
-    Args:
-        param1: Description for first parameter
-        param2: Description for second parameter
+# Retrieve reasoning for just the most recent interaction
+latest_reasoning = agent.get_reasoning(session_id="user123") 
 
-    Returns:
-        Description of what the tool returns
-    """
-    # Implementation...
+# Retrieve complete reasoning history for all interactions
+all_reasoning = agent.get_reasoning_history(session_id="user123")
 ```
 
-The requirements are:
+With `real_time_reasoning=True`, reasoning data is updated in DynamoDB continuously during execution, not just at the end of the process. This allows you to monitor the agent's thought process in real-time through a separate interface that polls the database.
 
-1. First line: Clear description of what the tool does
-2. Args section: Parameter descriptions in Google-style format
-3. Type annotations for all parameters (str, int, etc.)
+## Configuration Reference
 
-### Tool Logging
-
-Tools are completely independent of the agent's internal logging system. To configure tool logging, use standard Python logging configuration:
+Initialize the agent with any of these parameters:
 
 ```python
-# Tool developers can control their own logging
-logging.basicConfig(level=logging.INFO)
+agent = Agent(
+    # Tool Configuration
+    tools=[tool_1, tool_2],           # List of tool functions
+    
+    # Display and Logging
+    show_reasoning=True,              # Show colorized reasoning process
+    log_level="WARNING",              # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    
+    # Model Configuration
+    model_id="us.amazon.nova-pro-v1:0", # Amazon Bedrock model
+    system_prompt="You are a helpful assistant...", # Custom system prompt
+    
+    # Session Configuration
+    use_session_memory=True,          # Enable persistent conversations
+    session_table_name="my-sessions", # Custom DynamoDB table name
+    session_ttl=3600,                 # Session TTL in seconds (default: 1 hour)
+    real_time_reasoning=True,         # Update reasoning during execution
+    
+    # AWS Configuration
+    bedrock_region="us-west-2",       # AWS region for Bedrock
+    memory_region="us-east-1",        # AWS region for DynamoDB (defaults to bedrock_region)
+)
+```
 
-# Or configure specific loggers
-logging.getLogger("my_tools").setLevel(logging.DEBUG)
+### Parameter Reference
+
+| Parameter           | Type       | Default Value           | Description                 | Validation/Notes |
+|---------------------|------------|-------------------------|-----------------------------|------------------|
+| `tools`             | List       | `None`                  | Tool functions decorated with `@tool` | Functions must be decorated with `@tool` |
+| `max_steps`         | int        | `5`                     | Maximum tool use iterations | Must be > 0 |
+| `show_reasoning`    | bool       | `True`                  | Show colorized reasoning output | - |
+| `log_level`         | str        | `"WARNING"`             | Standard logging level | Must be one of: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL" |
+| `model_id`          | str        | `"us.amazon.nova-pro-v1:0"` | Amazon Bedrock model ID | Must be a model that supports function calling |
+| `bedrock_region`    | str        | `"us-west-2"`           | AWS region for Bedrock | Must be a valid AWS region where Bedrock is available |
+| `memory_region`     | str or None | Same as `bedrock_region` | AWS region for DynamoDB | Must be a valid AWS region where DynamoDB is available |
+| `system_prompt`     | str        | `""`                    | System prompt for the model | - |
+| `use_session_memory` | bool      | `False`                 | Enable persistent sessions | Auto-enabled if custom `session_table_name` is provided |
+| `real_time_reasoning` | bool     | `False`                | Update reasoning during execution | Only works when `use_session_memory=True` |
+| `session_table_name` | str       | `"minimalagent-session-table"` | DynamoDB table name | Alphanumeric with hyphens; Providing custom name auto-enables `use_session_memory` |
+| `session_ttl`       | int        | `3600` (1 hour)         | Session TTL in seconds | Must be > 0 |
+
+## AWS Setup
+
+MinimalAgent requires AWS credentials for accessing Amazon Bedrock and DynamoDB.
+
+### Option 1: AWS CLI Configuration (Recommended)
+
+1. Install and configure the AWS CLI:
+   ```bash
+   aws configure
+   ```
+
+2. Follow the prompts to enter your credentials and default region.
+
+### Option 2: Environment Variables
+
+```bash
+# Linux/macOS
+export AWS_ACCESS_KEY_ID=your_access_key_id
+export AWS_SECRET_ACCESS_KEY=your_secret_access_key
+export AWS_REGION=us-west-2
+```
+
+### Required IAM Permissions
+
+- `bedrock:InvokeModel` - Required for all uses
+- DynamoDB permissions (only if using sessions):
+  - `dynamodb:CreateTable`, `dynamodb:UpdateTimeToLive`
+  - `dynamodb:DescribeTable`, `dynamodb:PutItem`, `dynamodb:Query`
+
+## DynamoDB Implementation
+
+### Single-Table Design
+
+When using session memory, MinimalAgent employs a single-table design pattern storing different entity types in the same table:
+
+#### Table Schema
+
+| Attribute         | Type   | Description                                      |
+|-------------------|--------|--------------------------------------------------|
+| `pk`              | String | Partition key with entity type prefix            |
+| `sk`              | Number | Sort key using timestamp                         |
+| `expiration_time` | Number | TTL attribute for automatic data expiration      |
+| `messages`        | String | JSON string of conversation (only in message items) |
+| `reasoning`       | String | JSON string of reasoning data (only in reasoning items) |
+
+#### Entity Types
+
+The table stores two distinct types of items:
+
+| Entity Type          | `pk` Pattern           | `sk` Value | `messages` | `reasoning` | Description                     |
+|----------------------|------------------------|------------|------------|-------------|---------------------------------|
+| Conversation Messages | `messages#{session_id}`| Timestamp  | ✓          | -           | Full conversation history       |
+| Agent Reasoning       | `reasoning#{session_id}`| Timestamp  | -          | ✓           | Agent's thinking process & tools |
+
+### Bring Your Own Table
+
+If you prefer to create your own DynamoDB table (via CloudFormation, SAM, etc.), you must ensure it follows this schema:
+
+```yaml
+# AWS SAM example
+Resources:
+  AgentSessionTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: my-agent-sessions  # Name this whatever you prefer
+      BillingMode: PAY_PER_REQUEST  # Or use provisioned capacity
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: N
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiration_time
+        Enabled: true
+```
+
+To use your custom table:
+
+```python
+agent = Agent(
+    tools=[get_weather],
+    session_table_name="my-agent-sessions",  # Your custom table name
+    use_session_memory=True                  # Enable session memory
+)
 ```
 
 ## Security Considerations
 
-When using MinimalAgent, keep these security considerations in mind:
-
-1. **DynamoDB Data Storage**: When session persistence is enabled, conversation data is stored in DynamoDB without encryption. For sensitive applications, consider enabling [DynamoDB encryption](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/encryption.at-rest.html) or implement client-side encryption.
-
-2. **Input Validation**: The `session_id` parameter is validated to prevent injection attacks. Only alphanumeric characters, dashes, and underscores are allowed, with a maximum length of 128 characters.
-
-3. **Data Retention**: Session data has a configurable Time-to-Live (TTL), but be mindful of how long sensitive conversation data is stored in DynamoDB.
-
-4. **Rate Limiting**: There is no built-in rate limiting for Bedrock API calls. Consider implementing rate limiting in your application to prevent excessive costs.
-
-5. **System Prompts**: Be careful with the content of system prompts, as they can influence the model behavior. Avoid including sensitive data in prompts.
+- Session data is stored in DynamoDB without encryption by default
+- Session IDs are validated to prevent injection attacks
+- Session data automatically expires based on the configured TTL
+- Consider implementing rate limiting for production use
 
 ## License
 

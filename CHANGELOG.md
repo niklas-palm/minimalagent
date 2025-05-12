@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-05-12
+
+### Changed
+
+- **BREAKING CHANGE**: Updated DynamoDB table schema to use standard single-table design
+  - Changed `session_id` attribute to `pk` (partition key)
+  - Changed `timestamp` attribute to `sk` (sort key)
+  - All existing tables will need to be recreated with the new schema
+- Changed default log level from ERROR to WARNING to align with Python logging standards
+
+### Added
+
+- Enhanced DynamoDB documentation with comprehensive table structure details
+- More detailed explanations of single-table design pattern in README
+- Added additional tests for real-time reasoning functionality
+- Added comprehensive table showing entity types and their attributes
+- Added new `log_level` parameter to control standard logging verbosity
+- Completely redesigned logging system with separate pathways for:
+  - Standard logging (errors, warnings) using Python's logging module
+  - Colorized reasoning display for interactive use (controlled by show_reasoning)
+- Added debug logging for all major agent operations
+- Improved error logging to always log errors regardless of `show_reasoning` setting
+- Enhanced display methods with more distinct color coding and better formatting
+
+### Fixed
+
+- Improved test coverage for real_time_reasoning feature
+
 ## [0.1.0] - 2025-05-10
 
 ### Added

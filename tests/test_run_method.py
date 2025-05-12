@@ -7,6 +7,7 @@ import pytest
 
 # Project imports
 from minimalagent import Agent, tool
+from minimalagent.models import Reasoning
 
 
 @tool
@@ -58,11 +59,12 @@ class TestAgentRunMethod:
         mock_bedrock_client.converse.return_value = mock_response
 
         # Create agent and run query
-        agent = Agent(show_reasoning=False)
-        response = agent.run("Hello")
+        agent = Agent(show_reasoning=False, log_level="CRITICAL")
+        response, reasoning = agent.run("Hello")
 
         # Assert response
         assert response == "This is a test response"
+        assert isinstance(reasoning, Reasoning)
         mock_bedrock_client.converse.assert_called_once()
 
     @patch("minimalagent.agent.boto3")
@@ -109,11 +111,12 @@ class TestAgentRunMethod:
         ]
 
         # Create agent with tool and run query
-        agent = Agent(tools=[sample_tool], show_reasoning=False)
-        response = agent.run("Use the tool")
+        agent = Agent(tools=[sample_tool], show_reasoning=False, log_level="CRITICAL")
+        response, reasoning = agent.run("Use the tool")
 
         # Assert response and that converse was called twice
         assert response == "Tool returned: test"
+        assert isinstance(reasoning, Reasoning)
         assert mock_bedrock_client.converse.call_count == 2
 
     @patch("minimalagent.agent.boto3")
@@ -160,11 +163,12 @@ class TestAgentRunMethod:
         ]
 
         # Create agent with tool and run query
-        agent = Agent(tools=[failing_tool], show_reasoning=False)
-        response = agent.run("Use the failing tool")
+        agent = Agent(tools=[failing_tool], show_reasoning=False, log_level="CRITICAL")
+        response, reasoning = agent.run("Use the failing tool")
 
         # Assert response and that converse was called twice
         assert response == "The tool failed"
+        assert isinstance(reasoning, Reasoning)
         assert mock_bedrock_client.converse.call_count == 2
 
     @patch("minimalagent.agent.boto3")
@@ -210,29 +214,29 @@ class TestAgentRunMethod:
         ]
 
         # Create agent with tool, max_steps=3, and run query
-        agent = Agent(tools=[sample_tool], max_steps=3, show_reasoning=False)
-        response = agent.run("Use the tool repeatedly")
+        agent = Agent(
+            tools=[sample_tool], max_steps=3, show_reasoning=False, log_level="CRITICAL"
+        )
+        response, reasoning = agent.run("Use the tool repeatedly")
 
         # Assert response and that converse was called max_steps+1 times (initial + max_steps)
         assert response == "Reached maximum steps"
+        assert isinstance(reasoning, Reasoning)
         assert mock_bedrock_client.converse.call_count == 4  # Initial + 3 steps + final
 
     @patch("minimalagent.agent.boto3")
-    def test_run_with_session_memory(self, mock_boto3):
+    @patch("minimalagent.session.boto3")
+    def test_run_with_session_memory(self, mock_session_boto3, mock_agent_boto3):
         """Test running a query with session memory."""
         # Set up mock clients
         mock_bedrock_client = MagicMock()
         mock_ddb_client = MagicMock()
 
         # Configure boto3.client to return different clients based on service name
-        def mock_client(service_name, **kwargs):
-            if service_name == "bedrock-runtime":
-                return mock_bedrock_client
-            elif service_name == "dynamodb":
-                return mock_ddb_client
-            return MagicMock()
-
-        mock_boto3.client.side_effect = mock_client
+        mock_agent_boto3.client.side_effect = lambda service_name, **kwargs: (
+            mock_bedrock_client if service_name == "bedrock-runtime" else MagicMock()
+        )
+        mock_session_boto3.client.return_value = mock_ddb_client
 
         # Mock DynamoDB query response (no previous messages)
         mock_ddb_client.query.return_value = {"Items": []}
@@ -250,13 +254,18 @@ class TestAgentRunMethod:
         mock_bedrock_client.converse.return_value = mock_response
 
         # Create agent with session memory and run query
-        agent = Agent(use_session_memory=True, show_reasoning=False)
-        response = agent.run("Hello", session_id="test_session")
+        agent = Agent(
+            use_session_memory=True, show_reasoning=False, log_level="CRITICAL"
+        )
+        response, reasoning = agent.run("Hello", session_id="test_session")
 
         # Assert response
         assert response == "This is a session response"
-        mock_ddb_client.query.assert_called_once()
-        mock_ddb_client.put_item.assert_called_once()
+        assert isinstance(reasoning, Reasoning)
+
+        # Verify DynamoDB calls - session message queries get called
+        assert mock_ddb_client.query.call_count >= 1
+        assert mock_ddb_client.put_item.call_count >= 2
         mock_bedrock_client.converse.assert_called_once()
 
     @patch("minimalagent.agent.boto3")
@@ -278,8 +287,12 @@ class TestAgentRunMethod:
         }
 
         # Create agent with custom system prompt and run query
-        agent = Agent(system_prompt="Custom instructions", show_reasoning=False)
-        agent.run("Hello")
+        agent = Agent(
+            system_prompt="Custom instructions",
+            show_reasoning=False,
+            log_level="CRITICAL",
+        )
+        response, reasoning = agent.run("Hello")
 
         # Get the converse call arguments
         call_args = mock_bedrock_client.converse.call_args[1]

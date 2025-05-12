@@ -3,17 +3,19 @@
 # Standard library imports
 import datetime
 import json
-import re
-import time
 from textwrap import dedent
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 # Third-party imports
 import boto3
 from botocore.exceptions import ClientError
 
+from .models import Reasoning, ReasoningStep, ToolData
+from .session import SessionManager
+
 # Local imports
-from .utils.logging import Colors, color_log, setup_logging
+from .utils.logging import setup_logging
+from .utils.reasoning_display import ReasoningDisplay
 from .utils.tools import create_tool_spec
 
 
@@ -28,11 +30,13 @@ class Agent:
         tools: Optional[List[Callable]] = None,
         max_steps: int = 5,
         show_reasoning: bool = True,
+        log_level: str = "WARNING",
         model_id: str = "us.amazon.nova-pro-v1:0",
         bedrock_region: str = "us-west-2",
         memory_region: Optional[str] = None,
         system_prompt: str = "",
         use_session_memory: bool = False,
+        real_time_reasoning: bool = False,
         session_table_name: str = "minimalagent-session-table",
         session_ttl: int = 3600,  # 1 hour default
     ):
@@ -41,244 +45,115 @@ class Agent:
 
         Args:
             tools: Optional list of tool functions decorated with @tool
-            max_steps: Maximum number of tool use iterations to allow
-            show_reasoning: Whether to show agent's step-by-step reasoning process
+            max_steps: Maximum number of tool use iterations to allow (must be > 0)
+            show_reasoning: Whether to show agent's step-by-step reasoning process with color formatting
+            log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             model_id: Amazon Bedrock model ID to use (default: us.amazon.nova-pro-v1:0)
             bedrock_region: AWS region for Bedrock (default: us-west-2)
             memory_region: AWS region for DynamoDB session storage (default: same as bedrock_region)
             system_prompt: System prompt to customize model behavior (default: empty string)
             use_session_memory: Whether to enable persistent session memory with DynamoDB (default: False)
+            real_time_reasoning: Whether to update reasoning in real-time during execution (default: False)
             session_table_name: DynamoDB table name for storing session data (default: minimalagent-session-table)
-            session_ttl: Time-to-live for session data in seconds (default: 3600 - 1 hour)
+            session_ttl: Time-to-live for session data in seconds (must be > 0, default: 3600 - 1 hour)
+
+        Raises:
+            ValueError: If max_steps <= 0, session_ttl <= 0, or invalid log_level
+            ValueError: If session_table_name contains invalid characters
+            ValueError: If tools contains functions not decorated with @tool
         """
-        # Set up logging
-        self.logger = setup_logging(show_reasoning)
+        # Validate parameters
+        self._validate_param(max_steps > 0, "max_steps must be greater than 0")
+        self._validate_param(session_ttl > 0, "session_ttl must be greater than 0")
+
+        # Validate table name if provided
+        if session_table_name:
+            temp_manager = SessionManager(logger=setup_logging(False, "WARNING"))
+            self._validate_param(
+                temp_manager.is_valid_table_name(session_table_name),
+                "session_table_name must contain only alphanumeric characters, hyphens, dots, and underscores, "
+                "and be between 3 and 255 characters in length",
+            )
+
+        # Set up logging with separate controls for reasoning display and log level
+        self.logger = setup_logging(show_reasoning, log_level)
         self.show_reasoning = show_reasoning
 
-        # Set maximum tool use steps
-        self.max_steps = max_steps
+        # Set up reasoning display
+        self.display = ReasoningDisplay(self.logger) if show_reasoning else None
 
-        # Set model and regions
+        # Store basic configuration
+        self.max_steps = max_steps
         self.model_id = model_id
         self.system_prompt = system_prompt  # Will be processed before each run
         self.bedrock_region = bedrock_region
-        self.memory_region = (
-            memory_region if memory_region is not None else bedrock_region
-        )
 
-        # Session management settings
-        # Enable session memory either explicitly or implicitly when a table name is provided
-        self.use_session_memory = use_session_memory or (
+        # Auto-enable session memory if a custom table name is provided
+        use_session_memory = use_session_memory or (
             session_table_name != "minimalagent-session-table"
         )
-        self.session_table_name = (
-            session_table_name if self.use_session_memory else None
+
+        # Initialize session manager with validation and DynamoDB handling
+        memory_region_to_use = (
+            memory_region if memory_region is not None else bedrock_region
         )
-        self.session_ttl = session_ttl
-        self.ddb_client = None
+        self.session_manager = SessionManager(
+            logger=self.logger,
+            use_session_memory=use_session_memory,
+            session_table_name=session_table_name,
+            memory_region=memory_region_to_use,
+            session_ttl=session_ttl,
+            show_reasoning=show_reasoning,
+            real_time_reasoning=real_time_reasoning,
+        )
 
-        # Initialize session table if session memory is enabled (explicitly or implicitly)
-        if self.use_session_memory:
-            try:
-                self.ddb_client = boto3.client(
-                    "dynamodb", region_name=self.memory_region
-                )
-                self._ensure_session_table()
-            except Exception as e:
-                error_msg = f"Failed to initialize DynamoDB client: {str(e)}"
-                if "Could not connect to the endpoint URL" in str(e):
-                    error_msg = "AWS credentials not found or invalid. Please configure AWS credentials for DynamoDB access."
-                elif "ExpiredToken" in str(e):
-                    error_msg = "AWS credentials have expired. Please refresh your AWS credentials."
-
-                self.logger.error(error_msg)
-                self.use_session_memory = False
-                self.session_table_name = None
-                self.ddb_client = None
-
-        # Initialize Bedrock client
         try:
             self.bedrock_client = boto3.client(
                 "bedrock-runtime", region_name=self.bedrock_region
             )
+        except ClientError as e:
+            error_msg = self._get_aws_error_message(e, "Bedrock")
+            self.logger.error(error_msg)
+            raise RuntimeError(error_msg)
         except Exception as e:
-            error_msg = f"Failed to initialize Bedrock client: {str(e)}"
-            if "Could not connect to the endpoint URL" in str(e):
-                error_msg = "AWS credentials not found or invalid. Please configure AWS credentials for Amazon Bedrock access."
-            elif "ExpiredToken" in str(e):
-                error_msg = (
-                    "AWS credentials have expired. Please refresh your AWS credentials."
-                )
-
+            error_msg = self._get_general_error_message(
+                e, "Bedrock", self.bedrock_region
+            )
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        # Initialize empty tool configuration
         self.tool_functions = {}
         self.tool_config = {"tools": []}
-
-        # Process provided tools if any
         if tools:
-            self.add_tools(tools)
+            try:
+                self.add_tools(tools)
+            except (TypeError, ValueError) as e:
+                self.logger.error(f"Failed to initialize tools: {str(e)}")
+                raise ValueError(f"Invalid tools parameter: {str(e)}")
 
-    def _ensure_session_table(self):
+    def get_reasoning(self, session_id: str) -> Reasoning:
         """
-        Check if the DynamoDB table exists, and create it if it does not.
-        """
-        if not self.ddb_client:
-            return
-
-        try:
-            # Check if table exists
-            self.ddb_client.describe_table(TableName=self.session_table_name)
-            if self.show_reasoning:
-                self.logger.debug(
-                    f"DynamoDB table {self.session_table_name} already exists."
-                )
-        except ClientError as e:
-            if e.response["Error"]["Code"] == "ResourceNotFoundException":
-                # Create the table
-                if self.show_reasoning:
-                    self.logger.info(
-                        f"Creating DynamoDB table {self.session_table_name}..."
-                    )
-
-                # Create the table without TTL first
-                self.ddb_client.create_table(
-                    TableName=self.session_table_name,
-                    KeySchema=[
-                        {
-                            "AttributeName": "session_id",
-                            "KeyType": "HASH",
-                        },  # Partition key
-                        {"AttributeName": "timestamp", "KeyType": "RANGE"},  # Sort key
-                    ],
-                    AttributeDefinitions=[
-                        {"AttributeName": "session_id", "AttributeType": "S"},
-                        {"AttributeName": "timestamp", "AttributeType": "N"},
-                    ],
-                    BillingMode="PAY_PER_REQUEST",
-                )
-
-                # Wait for table to be created
-                waiter = self.ddb_client.get_waiter("table_exists")
-                waiter.wait(TableName=self.session_table_name)
-
-                # Enable TTL after table is created
-                try:
-                    self.ddb_client.update_time_to_live(
-                        TableName=self.session_table_name,
-                        TimeToLiveSpecification={
-                            "AttributeName": "expiration_time",
-                            "Enabled": True,
-                        },
-                    )
-                except Exception as err:
-                    self.logger.warning(
-                        f"Failed to enable TTL on table, but table was created: {str(err)}"
-                    )
-
-                if self.show_reasoning:
-                    self.logger.info(
-                        f"DynamoDB table {self.session_table_name} created successfully."
-                    )
-            else:
-                raise
-
-    def _get_session_messages(self, session_id: str) -> List[Dict]:
-        """
-        Retrieve the most recent session messages from DynamoDB.
+        Retrieve the most recent reasoning data for a session.
 
         Args:
             session_id: The session identifier
 
         Returns:
-            List of message dictionaries if found, empty list otherwise
+            Reasoning object with data if found, empty Reasoning object otherwise
         """
-        # Validate session_id to prevent injection attacks
-        if (
-            not self.ddb_client
-            or not session_id
-            or not self._is_valid_session_id(session_id)
-        ):
-            return []
+        return self.session_manager.get_reasoning(session_id)
 
-        try:
-            # Query the table to get the latest record for this session_id
-            response = self.ddb_client.query(
-                TableName=self.session_table_name,
-                KeyConditionExpression="session_id = :sid",
-                ExpressionAttributeValues={":sid": {"S": session_id}},
-                ScanIndexForward=False,  # Sort in descending order (newest first)
-                Limit=1,
-            )
-
-            if "Items" in response and response["Items"]:
-                # Extract the messages JSON from the item
-                item = response["Items"][0]
-                if "messages" in item:
-                    messages_json = item["messages"]["S"]
-                    return json.loads(messages_json)
-
-            if self.show_reasoning:
-                self.logger.debug(
-                    f"No existing messages found for session {session_id}"
-                )
-
-            return []
-
-        except Exception as e:
-            if self.show_reasoning:
-                self.logger.error(f"Error retrieving session messages: {str(e)}")
-            return []
-
-    def _save_session_messages(self, session_id: str, messages: List[Dict]) -> bool:
+    def get_reasoning_history(self, session_id: str) -> List[Reasoning]:
         """
-        Save the conversation messages to DynamoDB.
+        Retrieve all reasoning objects for a session.
 
         Args:
             session_id: The session identifier
-            messages: List of conversation message dictionaries
 
         Returns:
-            True if successful, False otherwise
+            List of reasoning objects ordered by timestamp
         """
-        # Validate session_id to prevent injection attacks
-        if (
-            not self.ddb_client
-            or not session_id
-            or not messages
-            or not self._is_valid_session_id(session_id)
-        ):
-            return False
-
-        try:
-            now = int(time.time())
-            expiration_time = now + self.session_ttl
-
-            # Store the messages as a JSON string
-            messages_json = json.dumps(messages)
-
-            # Save to DynamoDB
-            self.ddb_client.put_item(
-                TableName=self.session_table_name,
-                Item={
-                    "session_id": {"S": session_id},
-                    "timestamp": {"N": str(now)},
-                    "messages": {"S": messages_json},
-                    "expiration_time": {"N": str(expiration_time)},
-                },
-            )
-
-            if self.show_reasoning:
-                self.logger.debug(f"Saved session messages for session {session_id}")
-
-            return True
-
-        except Exception as e:
-            if self.show_reasoning:
-                self.logger.error(f"Error saving session messages: {str(e)}")
-            return False
+        return self.session_manager.get_reasoning_history(session_id)
 
     def add_tools(self, tools: List[Callable]):
         """
@@ -289,18 +164,43 @@ class Agent:
 
         Returns:
             Self reference for chaining
+
+        Raises:
+            ValueError: If any function in tools is not decorated with @tool
+            TypeError: If tools is not a list or contains non-callable items
+            ValueError: If a tool with the same name already exists
         """
+        self._validate_param(
+            isinstance(tools, list),
+            "tools must be a list of functions decorated with @tool",
+            TypeError,
+        )
+
+        if not tools:
+            return self  # Nothing to add
+
         tool_specs = []
 
         # Process each tool
-        for tool in tools:
+        for i, tool in enumerate(tools):
+            # Check if it's callable
+            self._validate_param(
+                callable(tool), f"Item at index {i} in tools is not callable", TypeError
+            )
+
             # Ensure tool is decorated with @tool
-            if not hasattr(tool, "tool_spec"):
-                raise ValueError(
-                    f"Function {tool.__name__} must be decorated with @tool"
-                )
+            self._validate_param(
+                hasattr(tool, "tool_spec"),
+                f"Function '{tool.__name__}' must be decorated with @tool",
+            )
 
             name = tool.tool_spec["name"]
+
+            # Check for duplicate tool names
+            self._validate_param(
+                name not in self.tool_functions,
+                f"A tool with name '{name}' already exists",
+            )
 
             # Add tool function to mapping
             self.tool_functions[name] = tool
@@ -310,6 +210,11 @@ class Agent:
 
         # Add tool specs to existing configuration
         self.tool_config["tools"].extend(tool_specs)
+
+        # Log tools added
+        self.logger.info(
+            f"Added {len(tools)} tools: {', '.join(t.tool_spec['name'] for t in tools)}"
+        )
 
         return self
 
@@ -324,6 +229,91 @@ class Agent:
         self.tool_config = {"tools": []}
 
         return self
+
+    def _validate_param(
+        self, condition: bool, error_message: str, error_type=ValueError
+    ) -> None:
+        """
+        Validate a condition and raise the specified error type with the provided message if it fails.
+
+        Args:
+            condition: The condition to check (should be True to pass validation)
+            error_message: The error message to use if validation fails
+            error_type: The type of error to raise (default: ValueError)
+
+        Raises:
+            Exception: If the condition is False, using the specified error_type
+        """
+        if not condition:
+            raise error_type(error_message)
+
+    def _get_aws_error_message(self, error: ClientError, service: str) -> str:
+        """
+        Get a user-friendly error message for AWS ClientErrors.
+
+        Args:
+            error: The ClientError exception
+            service: The AWS service name (e.g., "Bedrock", "DynamoDB")
+
+        Returns:
+            A user-friendly error message
+        """
+        error_code = error.response.get("Error", {}).get("Code", "")
+
+        error_messages = {
+            "UnrecognizedClientException": f"Invalid AWS credentials. Please configure valid AWS credentials for Amazon {service} access.",
+            "ExpiredTokenException": "AWS credentials have expired. Please refresh your AWS credentials.",
+            "AccessDeniedException": f"Insufficient permissions to access Amazon {service}. Check your IAM permissions.",
+            "AccessDenied": f"Insufficient permissions to access Amazon {service}. Check your IAM permissions.",
+            "ServiceUnavailableException": f"Amazon {service} service is currently unavailable in this region.",
+            "ValidationException": f"Invalid parameter provided to {service}: {str(error)}",
+            "ResourceNotFoundException": f"The requested {service} resource was not found.",
+        }
+
+        return error_messages.get(
+            error_code, f"{service} client error ({error_code}): {str(error)}"
+        )
+
+    def _get_general_error_message(
+        self, error: Exception, service: str, region: str = None
+    ) -> str:
+        """
+        Get a user-friendly error message for general exceptions.
+
+        Args:
+            error: The exception
+            service: The AWS service name
+            region: Optional AWS region
+
+        Returns:
+            A user-friendly error message
+        """
+        error_str = str(error)
+
+        if "Could not connect to the endpoint URL" in error_str:
+            return f"AWS credentials not found or invalid. Please configure AWS credentials for Amazon {service} access."
+        elif "ExpiredToken" in error_str:
+            return "AWS credentials have expired. Please refresh your AWS credentials."
+        elif "not available in region" in error_str and region:
+            return f"Amazon {service} is not available in region '{region}'. Choose a supported region."
+
+        return f"Failed to initialize {service} client: {error_str}"
+
+    def _update_realtime_reasoning(
+        self, reasoning: Reasoning, session_id: str = None
+    ) -> None:
+        """
+        Update reasoning data in real-time if conditions are met.
+
+        Args:
+            reasoning: The reasoning object to save
+            session_id: Optional session identifier
+
+        Returns:
+            None
+        """
+        if session_id:
+            self.session_manager.update_reasoning_if_needed(reasoning, session_id)
 
     def _format_system_prompt(self) -> str:
         """
@@ -352,8 +342,8 @@ class Agent:
         return system_prompt
 
     def _execute_tool(
-        self, tool_name: str, tool_inputs: Dict, tool_use_id: str
-    ) -> Dict:
+        self, tool_name: str, tool_inputs: Dict[str, Any], tool_use_id: str
+    ) -> Dict[str, Any]:
         """
         Execute a tool and format the result for the API.
 
@@ -369,11 +359,11 @@ class Agent:
             # Execute tool
             result = self.tool_functions[tool_name](**tool_inputs)
 
-            if self.show_reasoning:
-                # Log the result with color
-                color_log(f"✓ {tool_name}:", Colors.GREEN)
-                self.logger.info(json.dumps(result, indent=2))
-                self.logger.info("")
+            # Log successful tool execution
+            self.logger.debug(f"Tool '{tool_name}' executed successfully")
+
+            if self.display:
+                self.display.show_tool_result(tool_name, result)
 
             # Format for API
             return {
@@ -385,12 +375,11 @@ class Agent:
             # Handle errors
             error_message = str(err)
 
-            if self.show_reasoning:
-                # Log the error with color
-                color_log(f"✗ {tool_name} ERROR:", Colors.RED)
-                color_log(f"Error: {error_message}", Colors.RED)
-                self.logger.info(f"Inputs: {json.dumps(tool_inputs, indent=2)}")
-                self.logger.info("")
+            # Always log tool errors
+            self.logger.error(f"Tool '{tool_name}' failed: {error_message}")
+
+            if self.display:
+                self.display.show_tool_error(tool_name, error_message, tool_inputs)
 
             return {
                 "toolUseId": tool_use_id,
@@ -398,28 +387,11 @@ class Agent:
                 "status": "error",
             }
 
-    def _is_valid_session_id(self, session_id: str) -> bool:
+    def run(
+        self, input_text: str, session_id: Optional[str] = None
+    ) -> Tuple[str, Reasoning]:
         """
-        Validate session ID to prevent injection attacks.
-
-        Args:
-            session_id: The session identifier to validate
-
-        Returns:
-            True if session_id is valid, False otherwise
-        """
-        # Session ID must not be empty and should only contain alphanumeric chars,
-        # dashes, underscores, and can be up to 128 chars (common DynamoDB constraints)
-        if not session_id:
-            return False
-
-        # Validate using regex pattern for safe characters
-        pattern = r"^[a-zA-Z0-9_\-]{1,128}$"
-        return bool(re.match(pattern, session_id))
-
-    def run(self, input_text: str, session_id: Optional[str] = None) -> str:
-        """
-        Process user input, invoke tools if necessary, and return the response.
+        Process user input, invoke tools if necessary, and return the response with reasoning.
         Uses simple logging that creates a persistent log of each step.
 
         Args:
@@ -429,30 +401,34 @@ class Agent:
                         and be 1-128 characters long.
 
         Returns:
-            The agent's response
+            tuple: (agent_response, reasoning_object)
         """
         # Initialize messages - either from session or new conversation
-        if self.use_session_memory and session_id:
+        if self.session_manager.use_session_memory and session_id:
             # Validate session ID format
-            if not self._is_valid_session_id(session_id):
+            if not self.session_manager.is_valid_session_id(session_id):
                 error = "Invalid session_id format. Must contain only letters, numbers, underscores, dashes and be 1-128 characters."
-                if self.show_reasoning:
-                    self.logger.error(error)
-                return error
+                if self.display:
+                    self.display.show_error(error)
+                error_reasoning = Reasoning()
+                error_reasoning.final_response = error
+                return error, error_reasoning
 
-            if self.ddb_client:
+            if self.session_manager.ddb_client:
                 # Try to load existing session
-                messages = self._get_session_messages(session_id)
+                messages = self.session_manager.get_session_messages(session_id)
                 if messages:
-                    if self.show_reasoning:
-                        self.logger.debug(
+                    if self.display:
+                        self.display.show_info(
                             f"Loaded existing session {session_id} with {len(messages)} messages"
                         )
                 else:
                     # New session with this ID
                     messages = []
-                    if self.show_reasoning:
-                        self.logger.debug(f"Starting new session with ID: {session_id}")
+                    if self.display:
+                        self.display.show_info(
+                            f"Starting new session with ID: {session_id}"
+                        )
 
                 # Add the new user message
                 messages.append({"role": "user", "content": [{"text": input_text}]})
@@ -465,12 +441,15 @@ class Agent:
 
         step_count = 0
 
-        if self.show_reasoning:
-            # Print query with color - blank line before query
-            self.logger.info("")
-            color_log(f"QUERY: {input_text}", Colors.BOLD + Colors.CYAN)
-            self.logger.info("")
-            color_log("-" * 80, Colors.BLUE)
+        # Initialize reasoning object
+        reasoning = Reasoning(session_id=session_id, query=input_text)
+
+        # Log query at debug level
+        self.logger.debug(f"Processing query: {input_text}")
+
+        # Display reasoning if enabled
+        if self.display:
+            self.display.show_query(input_text)
 
         try:
             # Get initial response from model
@@ -499,11 +478,11 @@ class Agent:
                 # Increment step counter
                 step_count += 1
 
-                if self.show_reasoning:
-                    # Log step header with color
-                    self.logger.info("")
-                    color_log(f"STEP {step_count}", Colors.BOLD + Colors.YELLOW)
-                    color_log("-" * 40, Colors.YELLOW)
+                # Log step at debug level
+                self.logger.debug(f"Processing step {step_count}")
+
+                if self.display:
+                    self.display.show_step_header(step_count)
 
                 # Process tool requests
                 tool_requests = response["output"]["message"]["content"]
@@ -524,34 +503,35 @@ class Agent:
                             + 10 : thinking_text.find("</thinking>")
                         ].strip()
 
-                if self.show_reasoning:
-                    # Log the thinking/rationale with color
-                    if thinking:
-                        self.logger.info("")
-                        color_log("RATIONALE:", Colors.BOLD)
-                        self.logger.info(thinking)
-                        self.logger.info("")
+                # Log thinking at debug level
+                if thinking:
+                    self.logger.debug(f"Agent rationale: {thinking}")
 
-                    # Log the tools being called with color
+                    if self.display:
+                        self.display.show_thinking(thinking)
+
+                # Update reasoning with thinking
+                if thinking:
+                    reasoning = self.session_manager.update_reasoning(
+                        reasoning=reasoning, thinking=thinking, step_number=step_count
+                    )
+                    self._update_realtime_reasoning(reasoning, session_id)
+
+                    # Log the tools being called (debug level + display)
                     if tool_uses:
-                        color_log(f"ACTIONS ({len(tool_names)} tools):", Colors.BOLD)
-                        for i, tool in enumerate(tool_uses, 1):
-                            tool_name = tool["name"]
-                            tool_inputs = (
-                                json.dumps(tool["input"], indent=2)
-                                if tool["input"]
-                                else "{}"
-                            )
-                            self.logger.info(f"{i}. {tool_name}({tool_inputs})")
-                        self.logger.info("")
+                        # Log tools at debug level
+                        self.logger.debug(
+                            f"Using {len(tool_names)} tools: {', '.join(tool_names)}"
+                        )
+
+                        if self.display:
+                            self.display.show_tools(tool_uses)
 
                 # Collect tool results for this step
                 step_results = []
 
-                if self.show_reasoning:
-                    # Process each tool with color header
-                    color_log("## TOOL RESULTS", Colors.BOLD + Colors.GREEN)
-                    self.logger.info("")
+                if self.display:
+                    self.display.show_tool_results_header()
 
                 # Execute each tool
                 for tool_request in tool_requests:
@@ -568,13 +548,26 @@ class Agent:
                             )
                             step_results.append({"toolResult": tool_result})
 
+                            # Add tool data to the reasoning object
+                            if reasoning and reasoning.steps:
+                                tool_data = ToolData(
+                                    name=tool_name,
+                                    inputs=tool_inputs,
+                                    result=tool_result,
+                                )
+                                # Add to the tools list of the last step
+                                reasoning.steps[-1].tools.append(tool_data)
+
+                                # Update real-time reasoning after each tool use
+                                self._update_realtime_reasoning(reasoning, session_id)
+
                 # Send results back to model
                 if step_results:
                     tool_result_message = {"role": "user", "content": step_results}
                     messages.append(tool_result_message)
 
-                    if self.show_reasoning:
-                        self.logger.info("-" * 40)
+                    if self.display:
+                        self.display.show_step_delimiter()
 
                     try:
                         converse_params = {
@@ -592,24 +585,23 @@ class Agent:
                         error_msg = (
                             f"Error when sending tool results to model: {str(e)}"
                         )
-                        if self.show_reasoning:
-                            self.logger.error(error_msg)
+                        self.logger.error(error_msg)
                         raise Exception(error_msg)
                 else:
                     # No tool results
-                    if self.show_reasoning:
-                        self.logger.info("Warning: No tool results were collected")
+                    if self.display:
+                        self.display.show_warning("No tool results were collected")
                     break
 
             # Check if we hit max steps
             if step_count == self.max_steps and response["stopReason"] == "tool_use":
-                if self.show_reasoning:
-                    self.logger.info("")
-                    color_log(
-                        f"! Maximum number of steps reached ({self.max_steps})",
-                        Colors.RED + Colors.BOLD,
-                    )
-                    self.logger.info("")
+                # Always log max steps warning
+                self.logger.warning(
+                    f"Maximum number of steps reached ({self.max_steps})"
+                )
+
+                if self.display:
+                    self.display.show_max_steps_warning(self.max_steps)
 
                 max_steps_message = {
                     "role": "user",
@@ -642,54 +634,61 @@ class Agent:
                     + 10 : final_output.find("</thinking>")
                 ].strip()
 
-                if self.show_reasoning:
-                    self.logger.info("")
-                    color_log("FINAL REASONING:", Colors.BOLD + Colors.YELLOW)
-                    color_log("-" * 40, Colors.YELLOW)
-                    self.logger.info(final_thinking)
-                    self.logger.info("")
+                # Log final reasoning at debug level
+                self.logger.debug(f"Final reasoning: {final_thinking}")
+
+                if self.display:
+                    self.display.show_final_reasoning(final_thinking)
+
+                # Add final thinking to reasoning object
+                reasoning.final_thinking = final_thinking
 
                 clean_response = final_output.split("</thinking>")[-1].strip()
             else:
                 clean_response = final_output.strip()
 
-            if self.show_reasoning:
-                # Print completion status
-                self.logger.info("")
-                color_log("-" * 80, Colors.BLUE)
-                color_log(f"COMPLETE - {step_count} steps", Colors.GREEN + Colors.BOLD)
-                self.logger.info("")
+            # Add final response to reasoning object
+            reasoning.final_response = clean_response
 
-            # Pretty print the final response if reasoning display is enabled
-            if self.show_reasoning:
-                self.logger.info("")
-                color_log("FINAL RESPONSE:", Colors.BOLD + Colors.GREEN)
-                color_log("-" * 40, Colors.GREEN)
-                print(clean_response)
-                color_log("-" * 40, Colors.GREEN)
+            # Log completion at debug level
+            self.logger.debug(f"Query completed with {step_count} steps")
 
-            # Save final conversation to DynamoDB if using session memory
-            if self.use_session_memory and session_id and self.ddb_client:
+            if self.display:
+                # Display completion status
+                self.display.show_completion(step_count)
+
+                # Display final response
+                self.display.show_final_response(clean_response)
+
+            # Save final conversation and reasoning to DynamoDB if using session memory
+            if (
+                self.session_manager.use_session_memory
+                and session_id
+                and self.session_manager.ddb_client
+            ):
                 # Add final assistant message to the conversation history
                 messages.append(response["output"]["message"])
-                # Save to DynamoDB
-                self._save_session_messages(session_id, messages)
-                if self.show_reasoning:
-                    self.logger.debug(
-                        f"Saved conversation history for session {session_id}"
+                # Save messages to DynamoDB
+                self.session_manager.save_session_messages(session_id, messages)
+                # Save final reasoning data
+                self.session_manager.save_reasoning_data(session_id, reasoning)
+                if self.display:
+                    self.display.show_info(
+                        f"Saved conversation history and reasoning for session {session_id}"
                     )
 
-            return clean_response
+            return clean_response, reasoning
 
         except Exception as e:
             error_message = f"Error while processing request: {str(e)}"
 
-            # Format and display the error if reasoning display is enabled
-            if self.show_reasoning:
-                self.logger.info("")
-                color_log("ERROR:", Colors.BOLD + Colors.RED)
-                color_log("-" * 40, Colors.RED)
-                print(error_message)
-                color_log("-" * 40, Colors.RED)
+            # Always log the error
+            self.logger.error(f"Error processing request: {error_message}")
 
-            return error_message
+            # Display the error if reasoning display is enabled
+            if self.display:
+                self.display.show_error(error_message)
+
+            error_reasoning = Reasoning()
+            error_reasoning.final_response = error_message
+            return error_message, error_reasoning
