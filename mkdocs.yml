@@ -1,0 +1,62 @@
+site_name: MinimalAgent
+site_url: https://nipalm.github.io/minimalagent
+repo_url: https://github.com/nipalm/minimalagent
+repo_name: nipalm/minimalagent
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.expand
+    - navigation.indexes
+    - content.code.annotate
+    - content.code.copy
+    - search.highlight
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            heading_level: 2
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+    - Core Concepts: guide/concepts.md
+    - Agent Configuration: guide/configuration.md
+    - Tools: guide/tools.md
+    - Sessions & Memory: guide/sessions.md
+    - Logging & Display: guide/logging.md
+  - Examples:
+    - Basic Usage: examples/basic.md
+    - Custom Tools: examples/custom-tools.md
+    - Session Management: examples/sessions.md
+    - Reasoning Display: examples/reasoning.md
+  - API Reference:
+    - Agent: api/agent.md
+    - Tools: api/tools.md
+    - Models: api/models.md
+    - Session: api/session.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md
