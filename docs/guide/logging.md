@@ -1,240 +1,169 @@
 # Reasoning Display and Logging
 
-MinimalAgent provides rich, colorful display of agent reasoning along with comprehensive logging options. This guide shows you how to customize the display and logging to better understand your agent's behavior.
+MinimalAgent provides visibility into the agent's thinking process through both visual output and programmatic access to reasoning data.
 
-## Enabling the Reasoning Display
+## Visual Reasoning Display
 
-The reasoning display shows the agent's thinking steps, tool usage, and final response in a colorful, structured format:
+The agent can display its reasoning process directly in the terminal:
 
 ```python
-from minimalagent import Agent
+from minimalagent import Agent, tool
 
-agent = Agent(
-    tools=[...],
-    show_reasoning=True,  # Enable colorized reasoning display
-)
+@tool
+def search(query: str) -> dict:
+    """Search for information."""
+    return {"results": f"Results for {query}"}
 
-# The reasoning will be displayed in the console when run() is called
-response, reasoning = agent.run("What's the weather in Seattle?")
+# By default, colorized reasoning is shown in the terminal
+agent = Agent(tools=[search])
+response, reasoning = agent.run("Find information about machine learning")
 ```
 
-!!! tip
-    The reasoning display is particularly useful during development to understand how the agent processes queries.
+The display includes:
+- The original query
+- Each thinking step
+- Tools being used with their inputs
+- Tool results
+- The final response
 
-## Customizing Display Colors
+This makes it easy to understand how the agent reached its conclusion and which tools it used.
 
-You can customize the colors used in the reasoning display:
+## Controlling the Display
 
-```python
-from minimalagent import Agent
-from minimalagent.utils.reasoning_display import DisplayConfig
-
-# Create custom color scheme
-custom_colors = DisplayConfig(
-    thinking_color="cyan",
-    tool_name_color="magenta",
-    tool_input_color="yellow",
-    tool_result_color="green",
-    final_thinking_color="blue",
-    final_response_color="white",
-)
-
-# Use custom colors in the agent
-agent = Agent(
-    tools=[...],
-    show_reasoning=True,
-    display_config=custom_colors,
-)
-```
-
-Available colors include: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, and their bright variants (e.g., `bright_red`).
-
-## Display Formatting Options
-
-Control the display format with these options:
+You can enable or disable the colorized reasoning display:
 
 ```python
-from minimalagent import Agent
-
+# Enable reasoning display (default)
 agent = Agent(
-    tools=[...],
-    show_reasoning=True,
-    display_step_numbers=True,  # Show step numbers (default: True)
-    display_timestamps=True,    # Show timestamps for each step (default: False)
-    display_thinking=True,      # Show agent thinking (default: True)
-    tool_result_max_length=100, # Truncate long tool results (default: 500)
+    tools=[search],
+    show_reasoning=True
+)
+
+# Disable reasoning display for production
+agent = Agent(
+    tools=[search],
+    show_reasoning=False
 )
 ```
 
-## Logging Configuration
+## Accessing Reasoning Data Programmatically
 
-MinimalAgent integrates with Python's built-in logging system. Configure the log level:
-
-```python
-from minimalagent import Agent
-
-agent = Agent(
-    tools=[...],
-    log_level="INFO",  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
-)
-```
-
-Log levels control what information is output:
-- `DEBUG`: All details including tool executions and API calls
-- `INFO`: Important information plus warnings and errors
-- `WARNING`: Warning and error messages only
-- `ERROR`: Only error messages
-- `CRITICAL`: Only critical errors
-
-## Custom Logger Configuration
-
-You can customize the logger for more advanced logging:
+Even when visual display is disabled, you can access the complete reasoning data:
 
 ```python
-import logging
-from minimalagent import Agent
-from minimalagent.utils.logging import setup_logger
+# Disable visual display but still capture reasoning data
+agent = Agent(tools=[search], show_reasoning=False)
+response, reasoning = agent.run("Search for quantum computing")
 
-# Configure a custom logger
-custom_logger = logging.getLogger("my_custom_logger")
-custom_logger.setLevel(logging.INFO)
-
-# Add a file handler
-file_handler = logging.FileHandler("agent.log")
-file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-custom_logger.addHandler(file_handler)
-
-# Use the custom logger with the agent
-agent = Agent(
-    tools=[...],
-    logger=custom_logger,
-)
-```
-
-## Separating Reasoning Display from Logging
-
-You can enable logging without the colorized display:
-
-```python
-from minimalagent import Agent
-
-agent = Agent(
-    tools=[...],
-    show_reasoning=False,  # Disable colorized display
-    log_level="INFO",      # Still log important information
-)
-```
-
-## Capturing Reasoning Data
-
-Even when not displaying reasoning, you can still capture and analyze it:
-
-```python
-from minimalagent import Agent
-
-agent = Agent(
-    tools=[...],
-    show_reasoning=False,  # No visual display
-)
-
-response, reasoning = agent.run("What's the weather in Seattle?")
-
-# Extract information from reasoning
+# Access reasoning data programmatically
 print(f"Query: {reasoning.query}")
-print(f"Steps: {reasoning.total_steps}")
+print(f"Steps taken: {reasoning.total_steps}")
 
-# Analyze individual steps
-for i, step in enumerate(reasoning.steps):
-    print(f"Step {i+1} thinking: {step.thinking}")
+# Examine each step
+for step in reasoning.steps:
+    print(f"Step {step.step_number} thinking: {step.thinking}")
     
-    # Check tools used
+    # Examine tools used
     for tool in step.tools:
-        print(f"Tool used: {tool.name}")
+        print(f"Tool: {tool.name}")
         print(f"Inputs: {tool.inputs}")
         print(f"Result: {tool.result}")
 ```
 
-## Logging in Production
+This allows you to build your own visualizations or analytics on top of the reasoning data.
 
-For production environments, consider these best practices:
+## Agent Log Levels
+
+The agent's log level controls what information is logged during operation:
 
 ```python
-import logging
-from minimalagent import Agent
-
-# Configure production logging
-logging.basicConfig(
-    filename="agent_production.log",
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.WARNING,  # Higher threshold for production
+# Minimal logging (warnings and errors only)
+agent = Agent(
+    tools=[search],
+    log_level="WARNING"  # Default
 )
 
-# Create agent with minimal console output
+# Informational logs (good for general use)
 agent = Agent(
-    tools=[...],
-    show_reasoning=False,  # Disable console display
-    log_level="WARNING",   # Log only warnings and errors
+    tools=[search],
+    log_level="INFO"
+)
+
+# Verbose debugging (most detailed)
+agent = Agent(
+    tools=[search],
+    log_level="DEBUG"
 )
 ```
 
-## Debugging with Enhanced Logging
+Available log levels from least to most verbose:
+- `"CRITICAL"` - Only critical errors
+- `"ERROR"` - Error messages
+- `"WARNING"` - Warnings and errors (default)
+- `"INFO"` - General information plus warnings and errors
+- `"DEBUG"` - Detailed debug information plus everything above
 
-For debugging difficult issues, use enhanced logging:
+## Common Logging Scenarios
+
+### Development/Debugging
+
+For maximum visibility during development:
 
 ```python
-from minimalagent import Agent
-
-# Enable detailed debugging
 agent = Agent(
-    tools=[...],
-    show_reasoning=True,
-    log_level="DEBUG",      # Most verbose logging
-    display_timestamps=True,
-    display_step_numbers=True,
+    tools=[search],
+    show_reasoning=True,  # See colorized reasoning
+    log_level="DEBUG"     # Maximum logging detail
 )
-
-# The run will show maximum detail
-response, reasoning = agent.run("What's the weather in Seattle?")
 ```
 
-## Complete Example
+### Production
+
+For production environments:
 
 ```python
-from minimalagent import Agent, tool
-from minimalagent.utils.reasoning_display import DisplayConfig
+agent = Agent(
+    tools=[search],
+    show_reasoning=False,  # No visual display
+    log_level="WARNING"    # Only important warnings and errors
+)
+```
+
+### Monitoring
+
+For monitoring in production while maintaining some visibility:
+
+```python
+agent = Agent(
+    tools=[search],
+    show_reasoning=False,  # No visual display
+    log_level="INFO"       # Information about operations, warnings, and errors
+)
+```
+
+## Advanced: Integration with Python Logging
+
+MinimalAgent integrates with Python's standard logging system, allowing you to capture logs in your application's logging infrastructure:
+
+```python
 import logging
 
-# Create a tool
-@tool
-def multiply(a: float, b: float) -> dict:
-    """Multiply two numbers."""
-    return {"result": a * b}
-
-# Setup custom logging
+# Configure Python's logging system
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename="agent.log"  # Save to a file instead of console
 )
 
-# Custom display colors
-display_config = DisplayConfig(
-    thinking_color="bright_cyan",
-    tool_name_color="bright_green",
-    tool_input_color="bright_yellow",
-    tool_result_color="bright_magenta",
-    final_thinking_color="bright_blue",
-    final_response_color="bright_white",
-)
-
-# Create the agent
+# MinimalAgent will use this logging configuration
 agent = Agent(
-    tools=[multiply],
-    show_reasoning=True,
-    log_level="INFO",
-    display_config=display_config,
-    display_timestamps=True,
+    tools=[search],
+    log_level="INFO",  # This level applies to MinimalAgent's logger
 )
-
-# Run a query
-response, reasoning = agent.run("What is 12 times 34?")
 ```
+
+This is useful for:
+- Saving logs to files instead of the console
+- Integrating with existing logging infrastructure
+- Custom log formatting
+- Log rotation and management
