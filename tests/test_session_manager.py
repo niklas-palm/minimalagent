@@ -328,6 +328,8 @@ class TestSessionManager(unittest.TestCase):
             "query": "Test query",
             "steps": [{"step_number": 1, "thinking": "Test thinking"}],
             "total_steps": 1,
+            "truncated": False,
+            "exceeded_size_limit": False,
         }
         self.mock_ddb.query.return_value = {
             "Items": [{"reasoning": {"S": json.dumps(mock_reasoning_dict)}}]
@@ -360,11 +362,15 @@ class TestSessionManager(unittest.TestCase):
             "query": "First query",
             "steps": [{"step_number": 1, "thinking": "First thinking"}],
             "total_steps": 1,
+            "truncated": False,
+            "exceeded_size_limit": False,
         }
         mock_reasoning2_dict = {
             "query": "Second query",
             "steps": [{"step_number": 1, "thinking": "Second thinking"}],
             "total_steps": 1,
+            "truncated": False,
+            "exceeded_size_limit": False,
         }
         self.mock_ddb.query.return_value = {
             "Items": [

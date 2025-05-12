@@ -129,6 +129,8 @@ class TestReasoningPersistence(unittest.TestCase):
             "query": "Test query",
             "steps": [{"step_number": 1, "thinking": "Test thinking"}],
             "total_steps": 1,
+            "truncated": False,
+            "exceeded_size_limit": False,
         }
 
         self.mock_ddb.query.return_value = {
