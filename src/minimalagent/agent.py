@@ -666,8 +666,9 @@ class Agent:
                 and session_id
                 and self.session_manager.ddb_client
             ):
-                # Add final assistant message to the conversation history
-                messages.append(response["output"]["message"])
+                # Note: The final assistant message has already been added to messages
+                # in the main processing loop (line ~471), so we don't need to add it again
+
                 # Save messages to DynamoDB
                 self.session_manager.save_session_messages(session_id, messages)
                 # Save final reasoning data
