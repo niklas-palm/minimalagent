@@ -501,13 +501,14 @@ class SessionManager:
             final_response=reasoning.final_response,
             final_thinking=reasoning.final_thinking,
             truncated=True,
+            exceeded_size_limit=reasoning.exceeded_size_limit,
         )
 
         return truncated
 
     def _serialize_reasoning(self, reasoning: Reasoning) -> str:
         """
-        Serialize reasoning data to JSON, truncating if needed.
+        Serialize reasoning data to JSON.
 
         Args:
             reasoning: The reasoning data to serialize
@@ -521,15 +522,7 @@ class SessionManager:
         # Convert to dictionary first
         reasoning_dict = reasoning.to_dict()
         reasoning_json = json.dumps(reasoning_dict)
-
-        # Check if the JSON exceeds DynamoDB's capacity (400 KB)
-        if len(reasoning_json.encode("utf-8")) <= 390000:  # Use 390KB to be safe
-            return reasoning_json
-
-        # Truncate the reasoning data to fit
-        self.logger.warning("Reasoning data exceeds DynamoDB's capacity, truncating...")
-        truncated_reasoning = self._truncate_reasoning(reasoning)
-        return json.dumps(truncated_reasoning.to_dict())
+        return reasoning_json
 
     def save_reasoning_data(self, session_id: str, reasoning: Reasoning) -> bool:
         """
@@ -563,16 +556,69 @@ class SessionManager:
 
             timestamp = int(time.time())
             expiration_time = timestamp + self.session_ttl
-            self.ddb_client.put_item(
-                TableName=self.session_table_name,
-                Item={
-                    "pk": {"S": f"reasoning#{session_id}"},
-                    "sk": {"N": str(timestamp)},
-                    "reasoning": {"S": reasoning_json},
-                    "expiration_time": {"N": str(expiration_time)},
-                },
-            )
-            return True
+
+            try:
+                # Try to save the full reasoning data
+                self.ddb_client.put_item(
+                    TableName=self.session_table_name,
+                    Item={
+                        "pk": {"S": f"reasoning#{session_id}"},
+                        "sk": {"N": str(timestamp)},
+                        "reasoning": {"S": reasoning_json},
+                        "expiration_time": {"N": str(expiration_time)},
+                    },
+                )
+                return True
+
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                error_msg = e.response.get("Error", {}).get("Message", "")
+
+                # Check if this is a size limit error
+                if (
+                    "size exceeds" in error_msg.lower()
+                    or error_code == "ItemSizeTooLarge"
+                ):
+                    self.logger.error(
+                        f"Reasoning data exceeds DynamoDB's capacity limit: {error_msg}"
+                    )
+
+                    # Update the reasoning object to indicate size limit was exceeded
+                    reasoning.exceeded_size_limit = True
+
+                    # Add warning to final response if it exists
+                    size_limit_warning = "\n\nWARNING: This reasoning process was interrupted because it exceeded the maximum size limit for persistence. Some details may be missing."
+
+                    if reasoning.final_response:
+                        if size_limit_warning not in reasoning.final_response:
+                            reasoning.final_response += size_limit_warning
+
+                    # Try to save a truncated version with just enough information to be useful
+                    truncated_reasoning = self._truncate_reasoning(reasoning)
+                    truncated_json = json.dumps(truncated_reasoning.to_dict())
+
+                    try:
+                        self.ddb_client.put_item(
+                            TableName=self.session_table_name,
+                            Item={
+                                "pk": {"S": f"reasoning#{session_id}"},
+                                "sk": {"N": str(timestamp)},
+                                "reasoning": {"S": truncated_json},
+                                "expiration_time": {"N": str(expiration_time)},
+                            },
+                        )
+                        # We succeeded in saving the truncated version
+                        return True
+                    except Exception:
+                        # Even truncated version failed
+                        self.logger.error(
+                            "Failed to save even truncated reasoning data"
+                        )
+                        return False
+                else:
+                    # Some other DynamoDB error
+                    self.logger.error(f"Error saving reasoning data: {error_msg}")
+                    return False
 
         except Exception as e:
             self.logger.error(f"Error saving reasoning data: {str(e)}")

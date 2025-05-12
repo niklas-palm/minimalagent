@@ -163,51 +163,6 @@ class TestReasoningPersistence(unittest.TestCase):
 
     def test_size_limit_handling(self):
         """Test handling of large reasoning objects that exceed DynamoDB size limits."""
-        # Instead of mocking json.dumps, we'll mock the byte size check
-        # Create a custom mock for the session manager's save_reasoning_data method
-        original_method = self.agent.session_manager.save_reasoning_data
-
-        def mock_save_reasoning_data(session_id, reasoning):
-            # Create a truncated version of the reasoning with the truncated flag
-            steps = (
-                reasoning.steps[:1] + reasoning.steps[-1:]
-                if len(reasoning.steps) > 2
-                else reasoning.steps
-            )
-
-            truncated_reasoning = Reasoning(
-                session_id=reasoning.session_id,
-                query=reasoning.query,
-                steps=steps,
-                total_steps=reasoning.total_steps,
-                final_response=reasoning.final_response,
-                final_thinking=reasoning.final_thinking,
-                truncated=True,  # Set the truncation flag
-            )
-
-            # Convert to JSON and save to DynamoDB
-            reasoning_dict = truncated_reasoning.to_dict()
-            reasoning_json = json.dumps(reasoning_dict)
-
-            # Call DynamoDB put_item with the truncated reasoning
-            self.agent.session_manager.ddb_client.put_item(
-                TableName=self.agent.session_manager.session_table_name,
-                Item={
-                    "pk": {"S": f"reasoning#{session_id}"},
-                    "sk": {"N": str(int(time.time()))},
-                    "reasoning": {"S": reasoning_json},
-                    "expiration_time": {
-                        "N": str(
-                            int(time.time()) + self.agent.session_manager.session_ttl
-                        )
-                    },
-                },
-            )
-            return True
-
-        # Apply the mock
-        self.agent.session_manager.save_reasoning_data = mock_save_reasoning_data
-
         # Create test reasoning data with multiple steps
         current_time = int(time.time())
         steps = [
@@ -223,41 +178,57 @@ class TestReasoningPersistence(unittest.TestCase):
         ]
 
         test_reasoning = Reasoning(
-            session_id=self.session_id, query="Test query", steps=steps, total_steps=3
+            session_id=self.session_id, 
+            query="Test query", 
+            steps=steps, 
+            total_steps=3,
+            final_response="This is the final response."
         )
 
-        try:
-            # Save the reasoning data with our mock that will simulate truncation
-            result = self.agent.session_manager.save_reasoning_data(
-                self.session_id, test_reasoning
-            )
-            self.assertTrue(result)
+        # Mock DynamoDB to raise a size limit exception on first put_item call
+        self.mock_ddb.put_item.side_effect = [
+            ClientError(
+                {
+                    "Error": {
+                        "Code": "ItemSizeTooLarge",
+                        "Message": "Item size has exceeded the maximum allowed size",
+                    }
+                },
+                "PutItem",
+            ),
+            # Second call (with truncated data) succeeds
+            {},
+        ]
 
-            # Verify DynamoDB put_item was called
-            self.mock_ddb.put_item.assert_called_once()
+        # Save the reasoning data - this should trigger our size limit handling
+        result = self.agent.session_manager.save_reasoning_data(
+            self.session_id, test_reasoning
+        )
+        self.assertTrue(result)
 
-            # Extract the saved object and check for truncation flag
-            args, kwargs = self.mock_ddb.put_item.call_args
-            self.assertIn("Item", kwargs)
-            self.assertIn("reasoning", kwargs["Item"])
-            self.assertIn("S", kwargs["Item"]["reasoning"])
+        # Verify DynamoDB put_item was called twice (first fails, second succeeds)
+        self.assertEqual(self.mock_ddb.put_item.call_count, 2)
 
-            # Parse the saved JSON
-            saved_json = kwargs["Item"]["reasoning"]["S"]
-            saved_dict = json.loads(saved_json)
+        # Check the reasoning object was updated with the exceeded_size_limit flag
+        self.assertTrue(test_reasoning.exceeded_size_limit)
+        
+        # Check that a warning was added to the final response
+        self.assertIn("WARNING", test_reasoning.final_response)
+        self.assertIn("exceeded the maximum size limit", test_reasoning.final_response)
 
-            # Check for truncation flag
-            self.assertIn("truncated", saved_dict)
-            self.assertTrue(saved_dict["truncated"])
+        # Check the truncated version in the second put_item call
+        args, kwargs = self.mock_ddb.put_item.call_args_list[1]
+        saved_json = kwargs["Item"]["reasoning"]["S"]
+        saved_dict = json.loads(saved_json)
 
-            # Check that we only kept the first and last step
-            self.assertEqual(len(saved_dict["steps"]), 2)
-            self.assertEqual(saved_dict["steps"][0]["step_number"], 1)
-            self.assertEqual(saved_dict["steps"][1]["step_number"], 3)
+        # Check for flags in the saved data
+        self.assertTrue(saved_dict["truncated"])
+        self.assertTrue(saved_dict["exceeded_size_limit"])
 
-        finally:
-            # Restore the original method
-            self.agent.session_manager.save_reasoning_data = original_method
+        # Check that we only kept the first and last step
+        self.assertEqual(len(saved_dict["steps"]), 2)
+        self.assertEqual(saved_dict["steps"][0]["step_number"], 1)
+        self.assertEqual(saved_dict["steps"][-1]["step_number"], 3)
 
     def test_run_returns_tuple(self):
         """Test that run method returns a tuple with response and reasoning."""

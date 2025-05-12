@@ -35,6 +35,7 @@ class Reasoning:
     final_thinking: Optional[str] = None
     final_response: Optional[str] = None
     truncated: bool = False
+    exceeded_size_limit: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -44,6 +45,7 @@ class Reasoning:
             "query": self.query,
             "total_steps": self.total_steps,
             "truncated": self.truncated,
+            "exceeded_size_limit": self.exceeded_size_limit,
         }
 
         # Optional fields
@@ -115,4 +117,5 @@ class Reasoning:
             final_thinking=data.get("final_thinking"),
             final_response=data.get("final_response"),
             truncated=data.get("truncated", False),
+            exceeded_size_limit=data.get("exceeded_size_limit", False),
         )
