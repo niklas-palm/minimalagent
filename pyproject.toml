@@ -2,6 +2,50 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "minimalagent"
+dynamic = ["version"]
+description = "A lightweight agent framework for Amazon Bedrock"
+readme = "README.md"
+authors = [
+    {name = "Niklas Palm", email = "niklas@enpalm.se"},
+]
+requires-python = ">=3.8"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "boto3>=1.38.13",
+    "requests>=2.25.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/nipalm/minimalagent"
+Repository = "https://github.com/nipalm/minimalagent"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "isort>=5.0.0",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "minimalagent.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.black]
 line-length = 88
 target-version = ['py38']
