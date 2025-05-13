@@ -1,6 +1,6 @@
 """MinimalAgent - A lightweight agent framework."""
 
-__version__ = "0.24.0"
+__version__ = "0.2.4"
 
 from .agent import Agent
 from .tool import tool
