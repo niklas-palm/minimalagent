@@ -3,6 +3,12 @@
 !!! info
     This page mirrors the project's main [CHANGELOG.md](https://github.com/nipalm/minimalagent/blob/main/CHANGELOG.md) file.
 
+## [0.2.5] - 2025-05-13
+
+### Changed
+
+- Removed problematic docstring_tools_example.py due to persistent API compatibility issues
+
 ## [0.2.4] - 2025-05-13
 
 ### Changed
