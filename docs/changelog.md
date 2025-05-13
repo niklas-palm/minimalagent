@@ -8,6 +8,7 @@
 ### Changed
 
 - Removed problematic docstring_tools_example.py due to persistent API compatibility issues
+- Removed unused 'requests' dependency
 
 ## [0.2.4] - 2025-05-13
 

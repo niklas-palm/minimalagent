@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Removed problematic docstring_tools_example.py due to persistent API compatibility issues
+- Removed unused 'requests' dependency
 
 ## [0.2.4] - 2025-05-13
 

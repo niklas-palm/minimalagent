@@ -25,7 +25,6 @@ classifiers = [
 ]
 dependencies = [
     "boto3>=1.37.38",
-    "requests>=2.25.0",
 ]
 
 [project.urls]
