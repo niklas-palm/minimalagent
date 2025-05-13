@@ -3,7 +3,7 @@
 !!! info
     This page mirrors the project's main [CHANGELOG.md](https://github.com/nipalm/minimalagent/blob/main/CHANGELOG.md) file.
 
-## [0.2.5] - 2025-05-13
+## [0.2.6] - 2025-05-13
 
 ### Changed
 
