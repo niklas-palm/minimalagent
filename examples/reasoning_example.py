@@ -74,33 +74,33 @@ def analyze_sentiment(text: str) -> dict:
 def display_reasoning_data(reasoning, title="Reasoning Data"):
     """Helper function to display reasoning in a formatted way."""
     print(f"\n{title}:")
-    print(f"  • Query: {reasoning.get('query', 'N/A')}")
-    print(f"  • Total steps: {reasoning.get('total_steps', 0)}")
+    print(f"  • Query: {reasoning.query if reasoning.query else 'N/A'}")
+    print(f"  • Total steps: {reasoning.total_steps}")
 
     # Show each step's thinking
-    for i, step in enumerate(reasoning.get("steps", [])):
+    for i, step in enumerate(reasoning.steps):
         print(f"\n  Step {i+1} thinking:")
         # Truncate long content for display
-        thinking = step.get("thinking", "")
+        thinking = step.thinking if step.thinking else ""
         if thinking:
             print(f"    {thinking[:150]}{'...' if len(thinking) > 150 else ''}")
 
         # Show tools used in this step
-        tools = step.get("tools", [])
+        tools = step.tools
         if tools:
             print(f"\n    Tools used:")
             for tool in tools:
-                print(f"    • {tool['name']}")
-                print(f"      Inputs: {tool['inputs']}")
-                if "result" in tool and "content" in tool["result"]:
-                    content = tool["result"]["content"][0]
+                print(f"    • {tool.name}")
+                print(f"      Inputs: {tool.inputs}")
+                if tool.result and "content" in tool.result:
+                    content = tool.result["content"][0]
                     if "json" in content:
                         print(f"      Result: {json.dumps(content['json'], indent=2)}")
 
     # Show final thinking if available
-    if "final_thinking" in reasoning:
+    if reasoning.final_thinking:
         print("\n  Final reasoning:")
-        final_thinking = reasoning["final_thinking"]
+        final_thinking = reasoning.final_thinking
         print(f"    {final_thinking[:150]}{'...' if len(final_thinking) > 150 else ''}")
 
 
@@ -214,10 +214,10 @@ def run_reasoning_history_example(session_id):
     # Display summary of history
     print(f"\nFound {len(reasoning_history)} reasoning entries:")
     for i, entry in enumerate(reasoning_history):
-        print(f"\n{i+1}. Query: {entry.get('query', 'N/A')}")
-        print(f"   Total steps: {entry.get('total_steps', 0)}")
+        print(f"\n{i+1}. Query: {entry.query if entry.query else 'N/A'}")
+        print(f"   Total steps: {entry.total_steps}")
         print(
-            f"   Final response snippet: {entry.get('final_response', 'N/A')[:50]}..."
+            f"   Final response snippet: {entry.final_response[:50] if entry.final_response else 'N/A'}..."
         )
 
 

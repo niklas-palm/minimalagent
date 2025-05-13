@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2025-05-13
+
+### Changed
+
+- Improved documentation clarity about production readiness
+  - Added clear statements about AWS-native integration in README and docs
+  - Clarified that MinimalAgent is essentially a wrapper over Bedrock Converse API
+  - Added note about lack of integration with observability tools like Langfuse
+  - Updated docs to suggest alternative frameworks for large-scale production use
+
+### Fixed
+
+- Fixed AttributeError in reasoning_example.py
+  - Updated code to use direct attribute access on Reasoning objects instead of dictionary-style access
+  - Changed all instances of .get() method calls to direct attribute access
+  - Ensures proper access to Reasoning data class properties
+
 ## [0.2.3] - 2025-05-13
 
 ### Changed

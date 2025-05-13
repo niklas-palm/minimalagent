@@ -2,6 +2,8 @@
 
 This guide will help you quickly build an agentic application using MinimalAgent and Amazon Bedrock.
 
+MinimalAgent is essentially a wrapper over the Bedrock Covnerse API (with optional session management using DDB), making it a simple framework for quickly bootstrapping AWS-native agents. It currently lacks integration with observability tools like Langfuse, so for large-scale production deployments I encourage you to use another framework.
+
 ## Installation
 
 ```bash
@@ -9,7 +11,7 @@ pip install minimalagent
 ```
 
 !!! tip
-    Make sure you have Python 3.8 or newer installed.
+Make sure you have Python 3.8 or newer installed.
 
 ## 1. Create Your First Agent
 
@@ -22,10 +24,10 @@ from minimalagent import Agent, tool
 @tool
 def get_weather(location: str) -> dict:
     """Get current weather conditions.
-    
+
     Args:
         location: City name to get weather for
-    
+
     Returns:
         Weather information dictionary
     """
@@ -52,11 +54,11 @@ Agents become more powerful when they have multiple tools available:
 @tool
 def search_wiki(query: str, max_results: int = 3) -> list:
     """Search Wikipedia for information.
-    
+
     Args:
         query: Search terms
         max_results: Maximum number of results to return
-        
+
     Returns:
         List of search results
     """
@@ -69,10 +71,10 @@ def search_wiki(query: str, max_results: int = 3) -> list:
 @tool
 def calculate(expression: str) -> dict:
     """Calculate a mathematical expression.
-    
+
     Args:
         expression: The math expression to evaluate
-        
+
     Returns:
         Result of the calculation
     """
@@ -122,15 +124,15 @@ agent = Agent(
     # Tool configuration
     tools=[get_weather, search_wiki],
     max_steps=10,  # Allow more tool use iterations for complex tasks
-    
+
     # Display configuration
     show_reasoning=True,  # Show colorized reasoning in terminal
     log_level="INFO",  # More detailed logging (DEBUG, INFO, WARNING, ERROR)
-    
+
     # Model configuration
     model_id="us.amazon.nova-pro-v1:0",  # Specify Bedrock model
     system_prompt="You are a helpful weather assistant that provides accurate forecasts.",
-    
+
     # Session configuration
     use_session_memory=True,
     session_ttl=7200,  # 2-hour session timeout
@@ -151,7 +153,7 @@ print(f"Steps: {reasoning.total_steps}")
 for step in reasoning.steps:
     print(f"\nStep {step.step_number} thinking:")
     print(step.thinking)
-    
+
     for tool in step.tools:
         print(f"Tool: {tool.name}")
         print(f"Inputs: {tool.inputs}")
@@ -199,7 +201,7 @@ print(f"Response: {response1}")
 
 # Follow-up query
 response2, reasoning2 = agent.run(
-    "Convert that temperature to Fahrenheit.", 
+    "Convert that temperature to Fahrenheit.",
     session_id=session_id
 )
 print(f"Response: {response2}")
@@ -223,7 +225,7 @@ export AWS_REGION=us-west-2
 ```
 
 !!! warning "Permissions Required"
-    Ensure your AWS credentials have permissions to access the Amazon Bedrock service.
+Ensure your AWS credentials have permissions to access the Amazon Bedrock service.
 
 ## Next Steps
 

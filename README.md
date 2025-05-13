@@ -16,10 +16,10 @@ from minimalagent import Agent, tool
 @tool
 def get_weather(location: str):
     """Get weather for a location.
-    
+
     Args:
         location: City name to get weather for
-        
+
     Returns:
         Weather data dictionary
     """
@@ -40,6 +40,8 @@ print(response)
 - **Tool-first approach**: Easy tool creation with docstring parsing
 - **Built-in session memory**: Persistent conversations via DynamoDB
 - **Step-by-step reasoning**: Visibility into the agent's thought process
+
+MinimalAgent is essentially a wrapper over the Bedrock Covnerse API (with optional session management using DDB), making it a simple framework for quickly bootstrapping AWS-native agents. It currently lacks integration with observability tools like Langfuse, so for large-scale production deployments I encourage you to use another framework.
 
 ## Core Concepts
 
@@ -85,7 +87,7 @@ agent_with_display = Agent(
 # Hide reasoning output for production use
 agent_without_display = Agent(
     tools=[get_weather],
-    show_reasoning=False, 
+    show_reasoning=False,
     log_level="WARNING"  # Only log warnings and errors
 )
 ```

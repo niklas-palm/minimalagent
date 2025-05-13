@@ -23,11 +23,11 @@ from minimalagent import Agent, tool
 @tool
 def add(a: int, b: int) -> int:
     """Add two numbers.
-    
+
     Args:
         a: First number
         b: Second number
-        
+
     Returns:
         Sum of the two numbers
     """
@@ -47,6 +47,12 @@ MinimalAgent was created with these goals in mind:
 2. **Transparency** - Clear visibility into the agent's reasoning process
 3. **Extensibility** - Easy to add custom tools and capabilities
 4. **Performance** - Lightweight implementation with minimal dependencies
+
+## Production Considerations
+
+MinimalAgent is essentially a wrapper over the Bedrock Covnerse API (with optional session management using DDB), making it a simple framework for quickly bootstrapping AWS-native agents. It currently lacks integration with observability tools like Langfuse, so for large-scale production deployments I encourage you to use another framework.
+
+For large-scale production deployments that require enterprise-grade observability, reliability, and scaling capabilities, Amazon Bedrock Agents might be a more suitable alternative.
 
 ## License
 
