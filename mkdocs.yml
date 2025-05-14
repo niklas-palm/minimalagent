@@ -55,6 +55,7 @@ nav:
     - Basic Usage: examples/basic.md
   - API Reference:
     - Agent: api/agent.md
+    - Tool: api/tool.md
     - Models: api/models.md
   - Contributing: contributing.md
   - Changelog: changelog.md
