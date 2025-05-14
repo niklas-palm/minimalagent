@@ -3,12 +3,22 @@
 !!! info
     This page mirrors the project's main [CHANGELOG.md](https://github.com/nipalm/minimalagent/blob/main/CHANGELOG.md) file.
 
+## [0.2.7] - 2025-05-14
+
+### Added
+- Added `py.typed` marker file to enable proper type hints in IDEs
+
 ## [0.2.6] - 2025-05-13
 
 ### Changed
 
 - Removed problematic docstring_tools_example.py due to persistent API compatibility issues
 - Removed unused 'requests' dependency
+
+### Added
+
+- Added missing Tool API Reference documentation in docs/api/tool.md
+- Updated mkdocs.yml navigation to include Tool API documentation
 
 ## [0.2.4] - 2025-05-13
 

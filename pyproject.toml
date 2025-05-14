@@ -45,6 +45,9 @@ version = {attr = "minimalagent.__version__"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+minimalagent = ["py.typed"]
+
 [tool.black]
 line-length = 88
 target-version = ['py38']
